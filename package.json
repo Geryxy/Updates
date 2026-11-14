@@ -1,0 +1,27 @@
+{
+  "name": "kod-koronaja",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Köd Koronája – A birodalmak felemelkedése. Körökre osztott fantasy stratégiai játék.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "fake-indexeddb": "^6.2.8",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}
