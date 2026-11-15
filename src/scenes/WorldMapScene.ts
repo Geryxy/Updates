@@ -4,11 +4,11 @@ import { getApp } from '../app/context';
 import { FACTIONS, NEUTRAL_COLOR } from '../data/factions';
 import { Army, GameState, OwnerId, armyMen, capitalOf } from '../game/GameState';
 import { seasonOf } from '../game/SeasonSystem';
-import { GROUND_K, hasSprite, placeSprite } from '../render/Sprites';
-import { DECOR_ANCHOR_Y, staticLayerCanvas } from '../render/TerrainArt';
+import { GROUND_K, placeSprite } from '../render/Sprites';
+import { staticLayerCanvas } from '../render/TerrainArt';
 import { HEX, HEX_W, TEX_SCALE } from '../render/TextureFactory';
 import { hexCenter, hexCorners, neighborAcrossEdge, neighbors } from '../world/HexMap';
-import { FOG_VARIANTS, GROUND_VARIANTS, TERRAIN_VARIANTS } from './BootScene';
+import { DECOR_VARIANTS, FOG_VARIANTS, GROUND_VARIANTS, RUIN_VARIANTS } from './BootScene';
 import { armyFigures } from './figures';
 
 const INV = 1 / TEX_SCALE;
@@ -92,8 +92,7 @@ export class WorldMapScene extends Phaser.Scene {
     this.hiG = this.add.graphics().setDepth(DEPTH.highlight).setScale(1, K);
     s.tiles.forEach((tile, i) => {
       const { x, y } = this.pos(i);
-      this.decorImgs.push(this.add.image(x, y, '__DEFAULT').setOrigin(0.5, DECOR_ANCHOR_Y).setScale(INV)
-        .setDepth(this.objectDepth(y, BIAS.decor)).setVisible(!tile.cityId));
+      this.decorImgs.push(this.add.image(x, y, '__DEFAULT').setDepth(this.objectDepth(y, BIAS.decor)).setVisible(!tile.cityId));
     });
     this.labelLayer = this.add.container(0, 0).setDepth(DEPTH.labels);
     const animate = app.settings.quality !== 'low';
@@ -315,7 +314,7 @@ export class WorldMapScene extends Phaser.Scene {
     s.tiles.forEach((tile, i) => {
       if (!s.explored[i]) return;
       const { x, y } = this.pos(i);
-      if (tile.ruin) this.features.push(this.add.image(x, y - 6, 'ruin').setScale(INV * 1.15).setDepth(this.objectDepth(y, BIAS.feature)));
+      if (tile.ruin) this.features.push(placeSprite(this.add.image(x, y, '__DEFAULT'), `ruin-${i % RUIN_VARIANTS}`).setDepth(this.objectDepth(y, BIAS.feature)));
       if (tile.resource) this.features.push(this.add.image(x - 32, y + 15, `res-${tile.resource}`).setScale(INV * 0.85).setDepth(this.objectDepth(y + 15, BIAS.feature)));
     });
   }
@@ -330,14 +329,8 @@ export class WorldMapScene extends Phaser.Scene {
       // A feltáratlan vidék városa nem látszik: a magas épületek kilógnának a köd alól.
       if (!s.explored[c.tile]) continue;
       const { x, y } = this.pos(c.tile);
-      const name = `city-${c.level}-${c.owner}`;
-      const depth = this.objectDepth(y, BIAS.city);
-      if (hasSprite(name)) {
-        this.cityObjs.push(placeSprite(this.add.image(x, y, '__DEFAULT'), name, CITY_SCALE[c.level - 1]).setDepth(depth));
-      } else {
-        this.cityObjs.push(this.add.image(x, y - 14, `city-${c.level}`).setScale(INV * 1.22).setDepth(depth));
-        this.cityObjs.push(this.add.image(x - 30, y - 34, `flag-${c.owner}`).setScale(INV).setDepth(depth));
-      }
+      const sprite = placeSprite(this.add.image(x, y, '__DEFAULT'), `city-${c.level}-${c.owner}`, CITY_SCALE[c.level - 1]);
+      this.cityObjs.push(sprite.setDepth(this.objectDepth(y, BIAS.city)));
       const label = this.add.text(x, y + 38, (c.capitalOf ? '★ ' : '') + c.name, LABEL).setOrigin(0.5).setResolution(3);
       this.labelLayer.add(label);
       this.cityObjs.push(label);
@@ -353,12 +346,9 @@ export class WorldMapScene extends Phaser.Scene {
     base.fillStyle(col, 0.5); base.fillEllipse(0, 2, 56, 56 * K);
     base.lineStyle(2, col, 0.95); base.strokeEllipse(0, 2, 56, 56 * K);
     body.add(base);
-    const figures = armyFigures(a).filter(type => hasSprite(`unit-${type}-${a.owner}`));
-    if (!figures.length) {
-      body.add(this.add.image(0, -14, `token-${a.owner}`).setScale(INV * 0.92));
-      return;
-    }
-    if (hasSprite(`banner-${a.owner}`)) body.add(placeSprite(this.add.image(4, -12, '__DEFAULT'), `banner-${a.owner}`, UNIT_SCALE));
+    const figures = armyFigures(a);
+    if (!figures.length) return;
+    body.add(placeSprite(this.add.image(4, -12, '__DEFAULT'), `banner-${a.owner}`, UNIT_SCALE));
     const slots = SLOTS[figures.length - 1];
     figures.forEach((type, i) => body.add(placeSprite(this.add.image(slots[i].x, slots[i].y, '__DEFAULT'), `unit-${type}-${a.owner}`, UNIT_SCALE)));
   }
@@ -483,7 +473,7 @@ export class WorldMapScene extends Phaser.Scene {
       this.season = season;
       s.tiles.forEach((tile, i) => {
         this.tileImgs[i].setTexture(`g-${tile.terrain}-${season}-${i % GROUND_VARIANTS}`);
-        this.decorImgs[i].setTexture(`d-${tile.terrain}-${season}-${i % TERRAIN_VARIANTS}`);
+        placeSprite(this.decorImgs[i], `decor-${tile.terrain}-${season}-${i % DECOR_VARIANTS}`);
       });
       for (const m of this.motes) m.setTexture(`mote-${season}`);
     }

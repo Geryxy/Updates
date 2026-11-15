@@ -15,7 +15,10 @@ játszható PWA**.
 - Diplomácia nyolc lehetőséggel, indokolt AI-döntésekkel; 15 technológia három ágon
 - Területi, katonai és pontozásos győzelem; hat küldetéses oktatómód
 - Automatikus mentés, három mentési hely, JSON export/import
-- Kódból rajzolt grafika és szintetizált hang: nincs külső fájl, minden offline is működik
+- 3D-ben (Blenderben) modellezett világ: 25 városmodell (5 szint × 5 tulajdonos), külön figura minden
+  egységtípushoz minden frakció színeiben, évszakonként változó hegyek, erdők, dombok, mocsarak és romok
+- Döntött (2,5D) térképnézet: a seregek a térképen az összetételük szerinti figurákból állnak
+- Szintetizált hang: nincs letöltendő hangfájl, minden offline is működik
 
 ## Fejlesztés
 
@@ -26,6 +29,31 @@ npm test           # játékszabályok unit tesztjei + teljes 50 körös AI-szim
 npm run build      # optimalizált statikus fájlok a dist/ mappába
 npm run preview    # a kész build kipróbálása helyben
 ```
+
+## 3D-s modellek (Blender)
+
+A városok, egységek és a domborzat Blenderben, kódból készülnek (`tools/blender/kk/`), és előre
+lerenderelt, átlátszó hátterű képatlaszként kerülnek a játékba (`public/sprites/`). Így a játék
+sebessége és a telefonos működés nem változik, a modellek pedig bármikor újragenerálhatók:
+
+```bash
+python -m venv .venv && .venv/bin/pip install bpy pillow   # egyszer: a Blender Python-modulként
+.venv/bin/python tools/blender/build.py                     # csak a megváltozott modelleket rendereli újra
+.venv/bin/python tools/blender/build.py --only 'city-5-*'   # csak a mintára illőket
+.venv/bin/python tools/blender/build.py --force             # mindent újra
+```
+
+| Fájl | Tartalom |
+| --- | --- |
+| `kk/core.py` | anyagok, alapformák, közös kameraszög és megvilágítás, renderelés |
+| `kk/props.py` | építőelemek: házak, tornyok, falak, sátrak, fák, zászlók |
+| `kk/cities.py` | az öt városszint frakciónkénti stílussal |
+| `kk/units.py` | egységfigurák (milícia, lándzsás, íjász, lovas, ostromgép, felderítő) |
+| `kk/terrain.py` | domborzat évszakonként, romok |
+| `kk/atlas.py` | körülvágás, árnyékhalványítás, atlaszba csomagolás (WebP) |
+
+Minden kép ugyanabból a kameraszögből (40°-os rálátás) és ugyanazzal a fényeléssel készül, ezért a
+külön renderelt modellek egy világnak látszanak; a talaj a játékban ugyanilyen arányban rövidül.
 
 ## Windows – Köd Koronája Launcher
 
@@ -82,7 +110,7 @@ src/
   world/     hatszögrács, térképgenerátor, útkeresés, tereptípusok
   data/      frakciók, egységek, épületek, technológiák, események
   scenes/    Phaser-jelenetek (betöltés, menüháttér, világtérkép)
-  render/    kódból rajzolt grafika (terep, városok, címerek, logó)
+  render/    3D-s képatlaszok kezelése, festett talaj és köd, címerek, logó
   ui/        DOM-alapú kezelőfelület (HUD, panelek, felugró ablakok, menük)
   storage/   mentés (IndexedDB / Windows-fájlok), beállítások
   platform/  Tauri- és böngészőfüggő réteg
@@ -90,6 +118,7 @@ src/
   i18n/      szövegek (magyar; új nyelv egy további szótárral adható hozzá)
 src-tauri/   a Windows-alkalmazás natív (Rust) rétege
 tests/       Vitest tesztek
+tools/blender/  a 3D-s modellek és a renderelés Blender-szkriptjei
 ```
 
 A szabályok (`game/`, `ai/`, `world/`) nem függnek sem a megjelenítéstől, sem a platformtól;

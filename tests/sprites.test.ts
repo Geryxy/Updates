@@ -26,6 +26,12 @@ describe('3D-s képkészlet', () => {
       expect(sprites[`banner-${owner}`]).toBeDefined();
     }
   });
+  it('minden tereptípushoz minden évszakban három domborzatváltozat és két romváltozat tartozik', () => {
+    for (const terrain of ['plains', 'forest', 'hills', 'mountain', 'swamp'])
+      for (const season of ['spring', 'summer', 'autumn', 'winter'])
+        for (let v = 0; v < 3; v++) expect(sprites[`decor-${terrain}-${season}-${v}`], `${terrain}/${season}/${v}`).toBeDefined();
+    for (let v = 0; v < 2; v++) expect(sprites[`ruin-${v}`]).toBeDefined();
+  });
   it('az atlaszlapok léteznek, a képek a lapon belül vannak, a talajpont értelmes', () => {
     for (const page of manifest.pages) expect(existsSync(`public/sprites/${page}`), page).toBe(true);
     for (const [name, [page, x, y, w, h, ax, ay, u]] of Object.entries(sprites)) {

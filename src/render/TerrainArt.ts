@@ -1,17 +1,13 @@
 /**
- * Festményszerű terepgrafika. A talaj lágy szélű foltokból áll, amelyek a szomszédos
- * mezőkkel egymásba olvadnak; a domborzat és a növényzet külön rétegen, vetett
- * árnyékkal jelenik meg. Minden kódból készül, külső képfájl nélkül.
+ * Festményszerű talaj, köd és útháló. A talaj lágy szélű foltokból áll, amelyek a szomszédos
+ * mezőkkel egymásba olvadnak; a rajta álló domborzat, növényzet, városok és seregek
+ * Blenderben renderelt 3D-s képek (lásd Sprites.ts és tools/blender).
  */
 import type { Season, Terrain, Tile } from '../game/GameState';
 import { hexCenter, hexCorners, neighbors } from '../world/HexMap';
 import { Ctx, HEX, HEX_W, TEX_SCALE, makeCanvas, seeded } from './TextureFactory';
 
 export const GROUND_SIZE = HEX * 2.7;
-export const DECOR_W = HEX_W * 1.5;
-export const DECOR_H = HEX * 3.2;
-/** A díszítőréteg horgonypontja: a mező közepe a kép magasságának ennyied részénél van. */
-export const DECOR_ANCHOR_Y = 0.62;
 export const FOG_SIZE = HEX * 3;
 
 // ---------- Zajtextúrák (egyszer készülnek el) ----------
@@ -165,164 +161,6 @@ export function groundCanvas(terrain: Terrain, season: Season, variant: number):
   return c;
 }
 
-// ---------- Domborzat és növényzet ----------
-function shadow(ctx: Ctx, x: number, y: number, rw: number, rh: number, alpha = 0.34) {
-  const g = ctx.createRadialGradient(x, y, 0, x, y, rw);
-  g.addColorStop(0, `rgba(8,10,16,${alpha})`); g.addColorStop(1, 'rgba(8,10,16,0)');
-  ctx.save(); ctx.translate(x, y); ctx.scale(1, rh / rw); ctx.translate(-x, -y);
-  ctx.fillStyle = g; ctx.fillRect(x - rw, y - rw, rw * 2, rw * 2);
-  ctx.restore();
-}
-
-const LEAVES: Record<Season, string[][]> = {
-  spring: [['#2f6d32', '#4f9a45', '#86c765'], ['#2a6436', '#44904c', '#79c070'], ['#3a6f2a', '#5f9a3a', '#9fcf5a']],
-  summer: [['#215226', '#35783a', '#62a653'], ['#1d4a2a', '#2f6c3c', '#559a58'], ['#2a5a20', '#427f2e', '#73ac48']],
-  autumn: [['#7a3416', '#b5561d', '#e58a36'], ['#7a5a12', '#c0902a', '#efc65a'], ['#5e2a1c', '#96402a', '#cf6a3c']],
-  winter: [['#3a5248', '#56756a', '#dfeaee'], ['#33483f', '#4c6a60', '#edf4f7']],
-};
-const PINE: Record<Season, [string, string, string]> = {
-  spring: ['#16402a', '#27643c', '#4b9358'], summer: ['#123522', '#1f5532', '#3f8249'],
-  autumn: ['#173a26', '#285a36', '#4a8650'], winter: ['#1f3d36', '#3b6359', '#eef5f8'],
-};
-
-function conifer(ctx: Ctx, x: number, y: number, s: number, season: Season) {
-  const [dk, mid, hi] = PINE[season];
-  shadow(ctx, x + s * 0.34, y + s * 0.06, s * 0.62, s * 0.2);
-  ctx.fillStyle = '#3d2814'; ctx.fillRect(x - s * 0.05, y - s * 0.22, s * 0.1, s * 0.26);
-  for (let i = 0; i < 4; i++) {
-    const w = s * (0.46 - i * 0.09), base = y - s * (0.14 + i * 0.3), tip = base - s * 0.48;
-    ctx.fillStyle = dk; ctx.beginPath(); ctx.moveTo(x - w, base); ctx.lineTo(x + w, base); ctx.lineTo(x, tip); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = mid; ctx.beginPath(); ctx.moveTo(x - w, base); ctx.lineTo(x + w * 0.12, base); ctx.lineTo(x, tip); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = hi; ctx.globalAlpha = season === 'winter' ? 0.95 : 0.6;
-    ctx.beginPath(); ctx.moveTo(x - w * 0.85, base - s * 0.02); ctx.lineTo(x - w * 0.3, base - s * 0.04); ctx.lineTo(x - s * 0.02, tip + s * 0.05); ctx.closePath(); ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-}
-
-function broadleaf(ctx: Ctx, x: number, y: number, s: number, season: Season, r: () => number) {
-  const set = LEAVES[season][Math.floor(r() * LEAVES[season].length)];
-  shadow(ctx, x + s * 0.36, y + s * 0.05, s * 0.7, s * 0.22);
-  ctx.strokeStyle = '#3a2613'; ctx.lineWidth = s * 0.11; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + s * 0.02, y - s * 0.5); ctx.stroke();
-  const puffs: [number, number, number][] = [[0, -0.72, 0.42], [-0.3, -0.58, 0.32], [0.3, -0.6, 0.33], [0.02, -1.0, 0.3], [-0.2, -0.88, 0.26], [0.22, -0.9, 0.26]];
-  for (const [px, py, pr] of puffs) { ctx.fillStyle = set[0]; ctx.beginPath(); ctx.arc(x + px * s + s * 0.05, y + py * s + s * 0.06, pr * s, 0, Math.PI * 2); ctx.fill(); }
-  for (const [px, py, pr] of puffs) { ctx.fillStyle = set[1]; ctx.beginPath(); ctx.arc(x + px * s, y + py * s, pr * s * 0.9, 0, Math.PI * 2); ctx.fill(); }
-  for (const [px, py, pr] of puffs) {
-    ctx.fillStyle = set[2]; ctx.globalAlpha = season === 'winter' ? 0.9 : 0.55;
-    ctx.beginPath(); ctx.arc(x + px * s - pr * s * 0.3, y + py * s - pr * s * 0.34, pr * s * 0.48, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-}
-
-function deadTree(ctx: Ctx, x: number, y: number, s: number) {
-  shadow(ctx, x + s * 0.25, y + 1, s * 0.4, s * 0.12, 0.3);
-  ctx.strokeStyle = '#2b2219'; ctx.lineCap = 'round';
-  const line = (w: number, ...p: number[]) => { ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x + p[0] * s, y + p[1] * s); for (let i = 2; i < p.length; i += 2) ctx.lineTo(x + p[i] * s, y + p[i + 1] * s); ctx.stroke(); };
-  line(s * 0.1, 0, 0, 0.03, -0.55, -0.02, -0.95);
-  line(s * 0.06, 0.03, -0.5, 0.3, -0.78, 0.36, -1.0); line(s * 0.06, 0.01, -0.62, -0.26, -0.84, -0.4, -0.8);
-  line(s * 0.04, 0.3, -0.78, 0.46, -0.8); line(s * 0.04, -0.26, -0.84, -0.3, -1.02);
-}
-
-function mountain(ctx: Ctx, x: number, y: number, w: number, h: number, season: Season, r: () => number) {
-  const winter = season === 'winter';
-  shadow(ctx, x + w * 0.55, y + 2, w * 1.25, w * 0.34, 0.42);
-  const ridgeX = x + w * (r() * 0.16 - 0.08), shoulder = y - h * (0.5 + r() * 0.12);
-  // Megvilágított (bal) oldal.
-  const lg = ctx.createLinearGradient(x - w, y, ridgeX, y - h);
-  lg.addColorStop(0, winter ? '#8e9aa6' : '#6a655f'); lg.addColorStop(1, winter ? '#dfe7ec' : '#a9a295');
-  ctx.fillStyle = lg;
-  ctx.beginPath(); ctx.moveTo(x - w, y); ctx.lineTo(x - w * 0.55, shoulder + h * 0.16); ctx.lineTo(ridgeX, y - h); ctx.lineTo(ridgeX + w * 0.1, y - h * 0.5); ctx.lineTo(x + w * 0.05, y); ctx.closePath(); ctx.fill();
-  // Árnyékos (jobb) oldal.
-  const sg = ctx.createLinearGradient(ridgeX, y - h, x + w, y);
-  sg.addColorStop(0, winter ? '#6f7d8c' : '#4a444c'); sg.addColorStop(1, winter ? '#4d5967' : '#2a252e');
-  ctx.fillStyle = sg;
-  ctx.beginPath(); ctx.moveTo(ridgeX, y - h); ctx.lineTo(x + w * 0.5, shoulder + h * 0.2); ctx.lineTo(x + w, y); ctx.lineTo(x + w * 0.05, y); ctx.lineTo(ridgeX + w * 0.1, y - h * 0.5); ctx.closePath(); ctx.fill();
-  // Sziklabordák.
-  ctx.strokeStyle = 'rgba(20,18,24,0.42)'; ctx.lineWidth = 1;
-  for (let i = 0; i < 5; i++) {
-    const t = 0.2 + i * 0.15, sx = ridgeX + (x - w - ridgeX) * t * 0.9, sy = y - h + h * t;
-    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + w * 0.12, sy + h * 0.16); ctx.lineTo(sx + w * 0.06, sy + h * 0.3); ctx.stroke();
-    const tx = ridgeX + (x + w - ridgeX) * t * 0.9;
-    ctx.beginPath(); ctx.moveTo(tx, sy); ctx.lineTo(tx - w * 0.08, sy + h * 0.18); ctx.stroke();
-  }
-  // Hósapka.
-  const k = winter ? 0.6 : season === 'summer' ? 0.26 : 0.36;
-  ctx.fillStyle = '#f6fafc';
-  ctx.beginPath(); ctx.moveTo(ridgeX, y - h);
-  ctx.lineTo(ridgeX - w * k * 0.62, y - h + h * k); ctx.lineTo(ridgeX - w * k * 0.3, y - h + h * k * 0.78); ctx.lineTo(ridgeX - w * k * 0.1, y - h + h * k * 1.08);
-  ctx.lineTo(ridgeX + w * 0.06, y - h + h * k * 0.72); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#b9c8d6';
-  ctx.beginPath(); ctx.moveTo(ridgeX, y - h); ctx.lineTo(ridgeX + w * 0.06, y - h + h * k * 0.72); ctx.lineTo(ridgeX + w * k * 0.3, y - h + h * k * 0.95); ctx.lineTo(ridgeX + w * k * 0.5, y - h + h * k * 0.8); ctx.closePath(); ctx.fill();
-}
-
-function hill(ctx: Ctx, x: number, y: number, rw: number, rh: number, cols: [string, string, string, string], r: () => number) {
-  shadow(ctx, x + rw * 0.3, y + 3, rw * 1.15, rh * 0.55, 0.36);
-  const g = ctx.createLinearGradient(x - rw, y - rh, x + rw, y);
-  g.addColorStop(0, cols[2]); g.addColorStop(0.5, cols[0]); g.addColorStop(1, cols[3]);
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.moveTo(x - rw, y);
-  ctx.bezierCurveTo(x - rw * 0.7, y - rh * 1.25, x + rw * 0.5, y - rh * 1.3, x + rw, y); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = 'rgba(20,18,10,0.3)'; ctx.lineWidth = 0.9;
-  for (let i = 0; i < 5; i++) {
-    const t = 0.2 + r() * 0.6, hx = x - rw + rw * 2 * t, hy = y - rh * (0.9 - Math.abs(t - 0.5) * 1.1);
-    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo(hx + 3, hy + rh * 0.3, hx + 1, hy + rh * 0.55); ctx.stroke();
-  }
-}
-
-function rock(ctx: Ctx, x: number, y: number, s: number) {
-  ctx.fillStyle = '#8b8780'; ctx.beginPath(); ctx.moveTo(x - s, y); ctx.lineTo(x - s * 0.5, y - s * 0.9); ctx.lineTo(x + s * 0.5, y - s * 0.7); ctx.lineTo(x + s, y); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#4e4a4c'; ctx.beginPath(); ctx.moveTo(x + s * 0.1, y - s * 0.8); ctx.lineTo(x + s * 0.5, y - s * 0.7); ctx.lineTo(x + s, y); ctx.lineTo(x + s * 0.2, y); ctx.closePath(); ctx.fill();
-}
-
-/** A mező domborzata és növényzete (átlátszó háttérrel, a talajréteg fölé kerül). */
-export function decorCanvas(terrain: Terrain, season: Season, variant: number): HTMLCanvasElement {
-  const [c, ctx] = makeCanvas(DECOR_W, DECOR_H);
-  const cx = DECOR_W / 2, cy = DECOR_H * DECOR_ANCHOR_Y;
-  const r = seeded(variant * 733 + terrain.length * 389 + 5);
-  const cols = GROUND[terrain][season];
-  const spots = (n: number, spread: number) => Array.from({ length: n }, (): [number, number] => {
-    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * HEX * spread;
-    return [cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.86];
-  }).sort((a, b) => a[1] - b[1]);
-
-  if (terrain === 'forest') {
-    for (const [x, y] of spots(22, 0.88)) {
-      if (r() > 0.42) conifer(ctx, x, y + 10, 17 + r() * 9, season); else broadleaf(ctx, x, y + 10, 15 + r() * 7, season, r);
-    }
-  } else if (terrain === 'plains') {
-    for (const [x, y] of spots(variant % 3 === 1 ? 3 : 1, 0.7)) broadleaf(ctx, x, y + 6, 10 + r() * 5, season, r);
-    for (const [x, y] of spots(3, 0.8)) {
-      shadow(ctx, x + 3, y + 1, 7, 2.5, 0.28);
-      ctx.fillStyle = cols[3]; ctx.beginPath(); ctx.arc(x, y - 2, 4.2, 0, Math.PI * 2); ctx.arc(x + 4, y - 1, 3.2, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = cols[2]; ctx.globalAlpha = 0.7; ctx.beginPath(); ctx.arc(x - 1, y - 3.5, 2.4, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
-    }
-  } else if (terrain === 'hills') {
-    for (const [x, y] of spots(4, 0.62)) hill(ctx, x, y + 12, 22 + r() * 12, 13 + r() * 7, cols, r);
-    for (const [x, y] of spots(3, 0.8)) rock(ctx, x, y + 10, 3 + r() * 3);
-    if (variant % 2) for (const [x, y] of spots(2, 0.7)) conifer(ctx, x, y + 8, 12 + r() * 4, season);
-  } else if (terrain === 'mountain') {
-    const base = cy + 26;
-    mountain(ctx, cx - 24, base - 8, 24, 48 + r() * 8, season, r);
-    mountain(ctx, cx + 26, base - 4, 22, 42 + r() * 8, season, r);
-    mountain(ctx, cx + (variant % 2 ? -4 : 5), base + 6, 34, 76 + r() * 12, season, r);
-    for (const [x, y] of spots(5, 0.9)) if (y > cy + 8) rock(ctx, x, y + 16, 3 + r() * 4);
-  } else {
-    for (const [x, y] of spots(3, 0.75)) deadTree(ctx, x, y + 8, 16 + r() * 8);
-    ctx.lineCap = 'round';
-    for (const [x, y] of spots(18, 0.9)) {
-      ctx.strokeStyle = season === 'winter' ? '#77857a' : '#3a5a30'; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(x, y + 8); ctx.quadraticCurveTo(x + 1.5, y, x + 0.5, y - 4); ctx.stroke();
-      ctx.fillStyle = '#4a3320'; ctx.fillRect(x - 0.4, y - 7, 2, 4.5);
-    }
-    for (const [x, y] of spots(4, 0.8)) blob(ctx, x, y, 22 + r() * 14, 'rgba(190,215,205,1)', 0.16);
-  }
-  ctx.globalCompositeOperation = 'source-atop';
-  ctx.fillStyle = season === 'winter' ? 'rgba(40,60,90,0.1)' : 'rgba(10,16,30,0.2)';
-  ctx.fillRect(0, 0, DECOR_W, DECOR_H);
-  return c;
-}
-
-/** Sötét, gomolygó köd a feltáratlan vidék fölött; lágy szélű, hogy ne rajzolja ki a rácsot. */
 export function fogCanvas(variant: number): HTMLCanvasElement {
   const S = FOG_SIZE, c0 = S / 2;
   const [c, ctx] = makeCanvas(S, S);
@@ -395,5 +233,3 @@ export function staticLayerCanvas(tiles: Tile[], w: number, h: number): HTMLCanv
   strokeAll(roads, 4, 14, 1.2, 'rgba(70,50,26,0.5)', [3, 9]);
   return c;
 }
-
-export const STATIC_SCALE = 1 / TEX_SCALE;

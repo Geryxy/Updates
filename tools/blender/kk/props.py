@@ -296,7 +296,8 @@ def keep(m, w=2.3, h=3.4, rng=None):
 
 # ---------- Fák ----------
 def conifer(rng, season, s=1.0, snow=0.0):
-    needle = mat(LEAVES[season][0], rough=0.9, scale=9, snow=snow)
+    # A tűlevelek meredekek: kevesebb hó marad meg rajtuk, a zöld is kilátszik.
+    needle = mat(LEAVES[season][0], rough=0.9, scale=9, snow=snow * 0.62)
     limb((0, 0, 0), (0, 0, 0.5 * s), 0.08 * s, 0.05 * s, mat('#3d2814', scale=10), seg=7)
     tiers = 4
     for i in range(tiers):
@@ -304,7 +305,7 @@ def conifer(rng, season, s=1.0, snow=0.0):
         cyl(r, 0.0, 0.7 * s, (0, 0, (0.3 + i * 0.4) * s), needle, seg=9, rot_z=rng.uniform(0, 1), smooth=False)
 
 
-def broadleaf(rng, season, s=1.0, snow=0.0):
+def broadleaf(rng, season, s=1.0, snow=0.0, color=None):
     trunk = mat('#3d2814', scale=10)
     limb((0, 0, 0), (0.02 * s, 0, 0.75 * s), 0.09 * s, 0.06 * s, trunk, seg=7)
     if season == 'winter':
@@ -315,7 +316,7 @@ def broadleaf(rng, season, s=1.0, snow=0.0):
             limb((0, 0, 0.7 * s), tip, 0.045 * s, 0.015 * s, trunk, seg=5)
             ball(0.07 * s, tip, mat('#eef3f6', noise=0), seg=6)
         return
-    leaf = mat(rng.choice(LEAVES[season][1]), rough=0.9, scale=9, snow=snow)
+    leaf = mat(color or rng.choice(LEAVES[season][1]), rough=0.9, scale=9, snow=snow)
     for dx, dy, dz, r in ((0, 0, 1.15, 0.5), (-0.3, 0.1, 0.95, 0.36), (0.32, -0.06, 0.98, 0.38), (0.04, 0.24, 1.45, 0.32), (-0.08, -0.26, 1.02, 0.3)):
         blob(r * s, (dx * s, dy * s, dz * s), leaf, rng, squash=0.88)
 

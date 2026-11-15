@@ -125,8 +125,8 @@ def mat(base, rough=0.85, noise=0.16, scale=6.0, bump=0.0, emit=None, strength=0
             # A meredek sziklafalon nem marad meg a hó.
             steep = nt.nodes.new('ShaderNodeMapRange')
             steep.clamp = True
-            steep.inputs['From Min'].default_value = 0.25
-            steep.inputs['From Max'].default_value = 0.55
+            steep.inputs['From Min'].default_value = 0.1
+            steep.inputs['From Max'].default_value = 0.28
             nt.links.new(sep_n.outputs['Z'], steep.inputs['Value'])
             cap = nt.nodes.new('ShaderNodeMath')
             cap.operation = 'MULTIPLY'
@@ -221,6 +221,11 @@ def _finish(name, bm, material, local, smooth):
     ob.matrix_world = _stack[-1] @ local
     bpy.context.scene.collection.objects.link(ob)
     return ob
+
+
+def finish(bm, material, loc=(0, 0, 0), rot_z=0.0, smooth=False, name='mesh'):
+    """Saját építésű bmesh háló elhelyezése a jelenetben (az aktuális csoporton belül)."""
+    return _finish(name, bm, material, Matrix.Translation(loc) @ Matrix.Rotation(rot_z, 4, 'Z'), smooth)
 
 
 def box(sx, sy, sz, loc, material, rot_z=0.0, name='box'):

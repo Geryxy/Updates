@@ -37,5 +37,22 @@ export function placeSprite<T extends Phaser.GameObjects.Image>(img: T, name: st
   return img;
 }
 
+/** Az atlaszlapok betöltése képként (a Phaser nélküli launcherhez). */
+export function loadSpritePages(base = './sprites/'): Promise<HTMLImageElement[]> {
+  return Promise.all(SPRITE_PAGES.map(file => new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = base + file;
+  })));
+}
+
+/** 3D-s kép rajzolása 2D vászonra úgy, hogy a modell talajpontja az (x, y) pontra essen. */
+export function drawSprite(ctx: CanvasRenderingContext2D, pages: HTMLImageElement[], name: string, x: number, y: number, scale = 1) {
+  const e = SPRITES[name];
+  const k = (HEX / e[7]) * scale;
+  ctx.drawImage(pages[e[0]], e[1], e[2], e[3], e[4], x - e[5] * k, y - e[6] * k, e[3] * k, e[4] * k);
+}
+
 /** Különálló, kicsinyített kép a kezelőfelülethez (panelek, listák). */
 export const spriteUrl = (name: string) => `./sprites/ui/${name}.webp`;

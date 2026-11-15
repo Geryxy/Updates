@@ -4,8 +4,10 @@
  */
 import { t } from './i18n';
 import { APP_VERSION, isTauri, native } from './platform/Platform';
-import { DECOR_ANCHOR_Y, decorCanvas, fogCanvas, groundCanvas } from './render/TerrainArt';
-import { HEX, HEX_W, cityCanvas, logoUrl, ruinCanvas } from './render/TextureFactory';
+import { FACTION_IDS } from './game/GameState';
+import { GROUND_K, drawSprite, loadSpritePages } from './render/Sprites';
+import { FOG_SIZE, GROUND_SIZE, fogCanvas, groundCanvas, staticLayerCanvas } from './render/TerrainArt';
+import { HEX, HEX_W, TEX_SCALE, logoUrl } from './render/TextureFactory';
 import { Settings, WINDOW_SIZES, loadSettings, saveSettings } from './storage/Settings';
 import { hexCenter } from './world/HexMap';
 import { generateMap } from './world/MapGenerator';
@@ -16,39 +18,51 @@ let savesPath = '';
 let starting = false;
 const root = document.getElementById('launcher')!;
 
-/** Látványos háttér: ködbe burkolt világtérkép, kódból rajzolva. */
-function drawBackground() {
+/** Látványos háttér: a játék 3D-s világából összerakott, ködbe burkolt térkép. */
+async function drawBackground() {
   const canvas = document.getElementById('bg') as HTMLCanvasElement;
+  const pages = await loadSpritePages();
   const map = generateMap(Math.floor(Math.random() * 100000));
-  const w = HEX_W * 11.5, h = HEX * 1.5 * 10 + HEX * 2;
-  canvas.width = w * 2; canvas.height = h * 2;
+  const K = GROUND_K, R = 2;
+  const w = HEX_W * 11.5, h = (HEX * 1.5 * 10 + HEX * 2) * K;
+  canvas.width = w * R; canvas.height = h * R;
   const ctx = canvas.getContext('2d')!;
-  const cache = new Map<string, HTMLCanvasElement>();
-  const tex = (key: string, make: () => HTMLCanvasElement) => cache.get(key) ?? (cache.set(key, make()), cache.get(key)!);
-  const put = (img: HTMLCanvasElement, x: number, y: number, alpha = 1, anchorY = 0.5) => {
+  ctx.scale(R, R);
+  ctx.fillStyle = '#0d1118'; ctx.fillRect(0, 0, w, h);
+  const pos = (i: number) => { const c = hexCenter(i, HEX); return { x: c.x, y: c.y * K }; };
+  // A talaj és a köd a döntött nézetben függőlegesen rövidül.
+  const flat = (img: HTMLCanvasElement, x: number, y: number, size: number, alpha = 1) => {
     ctx.globalAlpha = alpha;
-    ctx.drawImage(img, x * 2 - img.width / 2, y * 2 - img.height * anchorY);
+    ctx.drawImage(img, x - size / 2, y - (size * K) / 2, size, size * K);
     ctx.globalAlpha = 1;
   };
-  ctx.fillStyle = '#0d1118'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const special = new Set([...map.capitals, ...map.villages]);
+  const grounds = new Map<string, HTMLCanvasElement>();
   map.tiles.forEach((tile, i) => {
-    const { x, y } = hexCenter(i, HEX);
-    put(tex(`g${tile.terrain}${i % 2}`, () => groundCanvas(tile.terrain, 'autumn', i % 2)), x, y);
+    const key = `${tile.terrain}${i % 2}`;
+    if (!grounds.has(key)) grounds.set(key, groundCanvas(tile.terrain, 'autumn', i % 2));
+    const { x, y } = pos(i);
+    flat(grounds.get(key)!, x, y, GROUND_SIZE);
   });
+  const roads = staticLayerCanvas(map.tiles, map.width, map.height);
+  ctx.drawImage(roads, 0, 0, roads.width / TEX_SCALE, (roads.height / TEX_SCALE) * K);
+
+  const owners = [...FACTION_IDS].sort(() => Math.random() - 0.5);
+  const settled = new Set([...map.capitals, ...map.villages]);
+  const items: { y: number; name: string; x: number; scale: number }[] = [];
   map.tiles.forEach((tile, i) => {
-    const { x, y } = hexCenter(i, HEX);
-    if (!special.has(i)) put(tex(`d${tile.terrain}${i % 3}`, () => decorCanvas(tile.terrain, 'autumn', i % 3)), x, y, 1, DECOR_ANCHOR_Y);
-    if (tile.ruin) put(tex('ruin', ruinCanvas), x, y);
+    const { x, y } = pos(i);
+    if (!settled.has(i)) items.push({ x, y, name: `decor-${tile.terrain}-autumn-${i % 3}`, scale: 1 });
+    if (tile.ruin) items.push({ x, y: y + 0.01, name: `ruin-${i % 2}`, scale: 1 });
   });
-  [...map.capitals, ...map.villages].forEach((i, k) => {
-    const { x, y } = hexCenter(i, HEX);
-    put(tex(`city${k < 4 ? 5 : 2}`, () => cityCanvas(k < 4 ? 5 : 2)), x, y - 10);
-  });
+  map.capitals.forEach((i, k) => items.push({ ...pos(i), name: `city-5-${owners[k]}`, scale: 1.15 }));
+  map.villages.forEach((i, k) => items.push({ ...pos(i), name: `city-${2 + (k % 2)}-neutral`, scale: 1.35 }));
+  for (const it of items.sort((a, b) => a.y - b.y)) drawSprite(ctx, pages, it.name, it.x, it.y, it.scale);
+
+  const fogs = [0, 1, 2].map(v => fogCanvas(v));
   map.tiles.forEach((_t, i) => {
-    const { x, y } = hexCenter(i, HEX);
-    const d = Math.hypot(x - w / 2, y - h / 2) / (w / 2);
-    put(tex(`fog${i % 3}`, () => fogCanvas(i % 3)), x, y, Math.min(0.95, Math.max(0.1, d * 0.9 + (Math.random() - 0.5) * 0.3)));
+    const { x, y } = pos(i);
+    const d = Math.hypot(x - w / 2, (y - h / 2) / K) / (w / 2);
+    flat(fogs[i % 3], x, y, FOG_SIZE, Math.min(0.95, Math.max(0.05, d * 0.85 + (Math.random() - 0.5) * 0.3)));
   });
 }
 
@@ -139,6 +153,6 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 void (async () => {
   settings = await loadSettings();
   if (isTauri) savesPath = await native<string>('saves_path').catch(() => '');
-  drawBackground();
+  void drawBackground().catch(() => undefined);
   render();
 })();
