@@ -164,6 +164,7 @@ export class GameApp {
   tileClicked(tile: number, secondary: boolean) {
     const s = this.state;
     if (!s || this.busy || this.ui.modalOpen()) return;
+    if (cityAt(s, tile)?.capitalOf === s.playerId) this.flag('capital');
     const army = this.activeArmyObj();
     if (army && tile !== army.tile && this.reach && !s.outcome) {
       if (this.reach.attacks.has(tile)) return this.ui.openModal('battle', { tile });
@@ -178,7 +179,6 @@ export class GameApp {
     if (tile === this.selectedTile && !army) return this.select(null);
     // Aktív hadsereg mellett a távoli mező csak kijelölődik; a panel felajánlja a menetelést.
     this.select(tile, army && tile !== army.tile ? army.id : null);
-    if (cityAt(s, tile)?.capitalOf === s.playerId) this.flag('capital');
   }
 
   canMarch(tile: number): boolean {

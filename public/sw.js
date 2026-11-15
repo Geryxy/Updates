@@ -23,7 +23,7 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then(hit => {
+    caches.match(req, { ignoreSearch: true, ignoreVary: true }).then(hit => {
       if (hit) return hit;
       return fetch(req).then(res => {
         if (res.ok) {
@@ -31,7 +31,7 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE).then(cache => cache.put(req, copy));
         }
         return res;
-      }).catch(() => (req.mode === 'navigate' ? caches.match('./index.html') : Response.error()));
+      }).catch(() => (req.mode === 'navigate' ? caches.match('./index.html', { ignoreVary: true }) : Response.error()));
     }),
   );
 });
