@@ -140,3 +140,12 @@ export function applyIncome(s: GameState, fid: FactionId) {
   for (const k of ['wood', 'stone', 'iron'] as ResKey[]) if (f.res[k] < 0) f.res[k] = 0;
   return inc;
 }
+
+/** Egy város saját adóbevétele és élelemigénye (a várospanel kijelzéséhez). */
+export function cityEconomy(s: GameState, c: { owner: string; pop: number; happiness: number; level: number }) {
+  if (c.owner === 'neutral') return { tax: 0, foodNeed: 0 };
+  const fid = c.owner as FactionId;
+  const goldMult = s.factions[fid].modifiers.reduce((v, mo) => v * (mo.goldMult ?? 1), 1);
+  const tax = c.pop * TAX_PER_POP * (0.5 + c.happiness / 200) * levelScale(c.level) * mods(fid).taxMult * (hasTech(s, fid, 'finance') ? 1.2 : 1) * goldMult;
+  return { tax: Math.round(tax), foodNeed: Math.round(c.pop * FOOD_PER_POP) };
+}

@@ -1,0 +1,36 @@
+/* Közös sötét fantasy arculat a játékhoz és a launcherhez. */
+:root {
+  --bg: #0d1118; --panel: rgba(17, 21, 31, 0.95); --panel2: #1c2333; --panel3: #262f43;
+  --line: #5d4f2c; --gold: #d7b866; --gold2: #f3dc97; --text: #ece3cc; --muted: #a39b84;
+  --pos: #86dc90; --neg: #ff8370; --blue: #6fb4ee;
+  --c-szikra: #e8b23a; --c-moha: #58a84f; --c-vaskapu: #c2483f; --c-volgyek: #4f8fd8; --c-neutral: #9a9488;
+  --serif: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+  font: 14px/1.4 var(--sans); overscroll-behavior: none; -webkit-text-size-adjust: 100%;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+h1, h2, h3 { font-family: var(--serif); color: var(--gold2); margin: 0; font-weight: 600; letter-spacing: 0.02em; }
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+button:disabled { cursor: not-allowed; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; min-height: 40px; padding: 7px 14px;
+  background: linear-gradient(#2c3549, #1b2231); border: 1px solid var(--line); border-radius: 7px; color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 2px 6px rgba(0, 0, 0, 0.35); transition: filter 0.12s, transform 0.08s;
+}
+.btn:hover:not(:disabled) { filter: brightness(1.2); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.45; }
+.btn.primary { background: linear-gradient(#e6c873, #b48f35); border-color: #f3dc97; color: #20170a; font-weight: 600; }
+.btn.danger { background: linear-gradient(#b8463a, #7c261e); border-color: #e58a7c; color: #fff; font-weight: 600; }
+.btn.big { min-height: 48px; font-size: 16px; padding: 10px 22px; font-family: var(--serif); letter-spacing: 0.03em; }
+.btn.small { min-height: 34px; padding: 4px 10px; font-size: 13px; }
+.btn.stack { flex-direction: column; gap: 0; align-items: flex-start; text-align: left; }
+.btn small { font-size: 11px; opacity: 0.95; }
+@media (pointer: coarse) { .btn { min-height: 44px; } .btn.small { min-height: 44px; } }
+.pos { color: var(--pos); } .neg { color: var(--neg); } .muted { color: var(--muted); }

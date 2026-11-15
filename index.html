@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Köd Koronája – A birodalmak felemelkedése</title>
+  <meta name="description" content="Körökre osztott fantasy stratégiai játék: építs királyságot, vezess hadjáratokat, köss szövetségeket, és egyesítsd Eldóriát.">
+  <meta name="theme-color" content="#0d1118">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Köd Koronája">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+  <link rel="apple-touch-startup-image" href="./icons/splash.png">
+  <link rel="stylesheet" href="./src/styles/game.css">
+</head>
+<body>
+  <div id="app">
+    <div id="game"></div>
+    <div id="season-fx" aria-hidden="true"></div>
+    <div id="vignette" aria-hidden="true"></div>
+    <div id="hud" hidden>
+      <header id="top"></header>
+      <aside id="side" class="empty"></aside>
+      <footer id="bottom"></footer>
+    </div>
+    <main id="screen" hidden></main>
+    <div id="modal-root" hidden></div>
+    <div id="busy" hidden></div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <div id="boot"><div class="boot-crown"></div><p>Köd Koronája</p><small>Betöltés…</small></div>
+  </div>
+  <noscript>A játékhoz JavaScript szükséges.</noscript>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

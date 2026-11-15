@@ -1,0 +1,95 @@
+name: Windows telepítő (Tauri)
+
+on:
+  push:
+    branches: [main, master, 'claude/**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Függőségek telepítése
+        run: npm ci
+
+      - name: Játékszabályok tesztelése
+        run: npm test
+
+      - name: Rust tesztek
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Windows alkalmazás és EXE telepítő (NSIS)
+        run: npm run tauri build
+
+      - name: MSI telepítő (opcionális)
+        continue-on-error: true
+        run: npm run tauri build -- --bundles msi
+
+      - name: Kimenetek összegyűjtése
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Copy-Item src-tauri/target/release/KodKoronajaLauncher.exe release/KodKoronajaLauncher.exe
+          $setup = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          Copy-Item $setup.FullName release/KodKoronajaSetup_x64.exe
+          $msi = Get-ChildItem src-tauri/target/release/bundle/msi/*.msi -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($msi) { Copy-Item $msi.FullName release/KodKoronaja_x64.msi }
+          Get-ChildItem release | Format-Table Name, Length
+
+      - name: Telepítés, indítás és eltávolítás ellenőrzése
+        shell: pwsh
+        run: |
+          $dir = "$env:LOCALAPPDATA\KodKoronajaTest"
+          Start-Process -FilePath release/KodKoronajaSetup_x64.exe -ArgumentList '/S', "/D=$dir" -Wait
+          $exe = Join-Path $dir 'KodKoronajaLauncher.exe'
+          if (-not (Test-Path $exe)) { throw "A telepítő nem hozta létre: $exe" }
+          $links = @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs", [Environment]::GetFolderPath('Desktop')) |
+            ForEach-Object { Get-ChildItem $_ -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue } | Where-Object { $_.Name -like '*Koron*' }
+          Write-Host "Parancsikonok:"; $links | ForEach-Object { Write-Host " - $($_.FullName)" }
+          if (-not $links) { throw 'Nem jött létre parancsikon.' }
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 12
+          if ($p.HasExited) { throw "A launcher azonnal kilépett (kód: $($p.ExitCode))." }
+          Write-Host "A launcher fut (PID $($p.Id))."
+          Stop-Process -Id $p.Id -Force
+          Start-Sleep -Seconds 2
+          $un = Join-Path $dir 'uninstall.exe'
+          if (-not (Test-Path $un)) { throw 'Hiányzik az eltávolító.' }
+          Start-Process -FilePath $un -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path $exe) { throw 'Az eltávolítás után is megmaradt az alkalmazás.' }
+          Write-Host 'Telepítés, indítás és eltávolítás rendben.'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KodKoronaja-Windows
+          path: release/*
+          if-no-files-found: error
+
+      - name: Kiadás közzététele (csak verziócímkénél)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*

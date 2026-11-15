@@ -1,5 +1,5 @@
 import { FACTIONS, NEUTRAL_CITIES } from '../data/factions';
-import { neighbors } from '../world/HexMap';
+import { hexDistance, neighbors, tilesWithin } from '../world/HexMap';
 import { PRESET_SEED, generateMap } from '../world/MapGenerator';
 import {
   City, Difficulty, FACTION_IDS, FactionId, FactionState, GameState, Pair, SAVE_VERSION, pairKey, rand,
@@ -73,6 +73,14 @@ export function newGame(opts: NewGameOptions): GameState {
     { type: 'spear', count: 100 }, { type: 'spear', count: 100 }, { type: 'archer', count: 100 }, { type: 'archer', count: 80 },
   ], t('army.mistGuard'));
 
+  if (opts.tutorial) {
+    // Oktatómód: gyenge útonállók a főváros közelében, hogy a harc kipróbálható legyen.
+    const cap = s.cities.find(c => c.capitalOf === opts.player)!;
+    const spot = tilesWithin(cap.tile, 2, s.width).find(i => hexDistance(i, cap.tile, s.width) === 2
+      && !s.tiles[i].cityId && !s.armies.some(a => a.tile === i) && s.tiles[i].terrain === 'plains')
+      ?? tilesWithin(cap.tile, 2, s.width).find(i => hexDistance(i, cap.tile, s.width) === 2 && !s.tiles[i].cityId && s.tiles[i].terrain !== 'mountain');
+    if (spot !== undefined) createArmy(s, 'neutral', spot, [{ type: 'militia', count: 60 }], t('army.bandits'));
+  }
   refreshMoves(s);
   updateExplored(s);
   addLog(s, t('log.start', { faction: t(`faction.${opts.player}`) }), 'info');

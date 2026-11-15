@@ -162,7 +162,8 @@ export function resolveBattle(s: GameState, attacker: Army, tile: number): Battl
     sa.fate = 'advanced';
     if (!real) sd.fate = 'destroyed';
     else {
-      const to = armyMen(defender) >= menD * 0.2 ? retreatTile(s, defender, from) : null;
+      // A független helyőrségek nem vonulnak vissza: vereség esetén szétszélednek.
+      const to = defender.owner !== 'neutral' && armyMen(defender) >= menD * 0.2 ? retreatTile(s, defender, from) : null;
       if (to === null) { defender.squads = []; sd.fate = 'destroyed'; }
       else { defender.tile = to; defender.goto = null; sd.fate = 'retreated'; }
     }

@@ -49,3 +49,24 @@ export function hexCenter(idx: number, size: number, w = MAP_W) {
   const hw = Math.sqrt(3) * size;
   return { x: hw * (q + 0.5 * (r & 1)) + hw / 2, y: size * 1.5 * r + size };
 }
+
+/** Hatszög sarkai (0 = jobb felső, óramutató szerint). */
+export function hexCorners(cx: number, cy: number, size: number): { x: number; y: number }[] {
+  const out = [];
+  for (let k = 0; k < 6; k++) {
+    const a = (Math.PI / 180) * (60 * k - 30);
+    out.push({ x: cx + size * Math.cos(a), y: cy + size * Math.sin(a) });
+  }
+  return out;
+}
+
+/** A k. él (a k. és k+1. sarok között) túloldalán lévő szomszéd indexe, vagy -1 a térképen kívül. */
+export function neighborAcrossEdge(idx: number, edge: number, w = MAP_W, h = MAP_H): number {
+  const { q, r } = toQR(idx, w);
+  const odd = r & 1;
+  const d = [
+    [1, 0], [odd ? 1 : 0, 1], [odd ? 0 : -1, 1], [-1, 0], [odd ? 0 : -1, -1], [odd ? 1 : 0, -1],
+  ][edge];
+  const nq = q + d[0], nr = r + d[1];
+  return nq >= 0 && nq < w && nr >= 0 && nr < h ? toIdx(nq, nr, w) : -1;
+}
