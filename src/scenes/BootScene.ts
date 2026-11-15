@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getApp } from '../app/context';
 import { RES_KEYS } from '../game/GameState';
 import { SEASONS } from '../game/SeasonSystem';
+import { SPRITE_PAGES, pageKey, registerSprites } from '../render/Sprites';
 import { decorCanvas, fogCanvas, glowCanvas, groundCanvas } from '../render/TerrainArt';
 import { cityCanvas, flagCanvas, resBadgeCanvas, ruinCanvas, tokenCanvas } from '../render/TextureFactory';
 import { TERRAINS } from '../world/TerrainTypes';
@@ -12,11 +13,16 @@ export const MOTE_COLORS = { spring: '#d8ffb0', summer: '#fff2a8', autumn: '#ffb
 export const FOG_VARIANTS = 3;
 export const OWNERS = ['szikra', 'moha', 'vaskapu', 'volgyek', 'neutral'] as const;
 
-/** Betöltő jelenet: a teljes grafikát kódból állítja elő, majd átadja a vezérlést. */
+/** Betöltő jelenet: betölti a 3D-s képatlaszokat, előállítja a rajzolt textúrákat, majd átadja a vezérlést. */
 export class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
 
+  preload() {
+    SPRITE_PAGES.forEach((file, i) => this.load.image(pageKey(i), `./sprites/${file}`));
+  }
+
   create() {
+    registerSprites(this.textures);
     const add = (key: string, canvas: HTMLCanvasElement) => { if (!this.textures.exists(key)) this.textures.addCanvas(key, canvas); };
     for (const terrain of TERRAINS) for (const season of SEASONS) {
       for (let v = 0; v < GROUND_VARIANTS; v++) add(`g-${terrain}-${season}-${v}`, groundCanvas(terrain, season, v));

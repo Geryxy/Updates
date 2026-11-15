@@ -2,20 +2,46 @@ import Phaser from 'phaser';
 import { pixelRatio } from '../app/GameConfig';
 import { getApp } from '../app/context';
 import { FACTIONS, NEUTRAL_COLOR } from '../data/factions';
-import { GameState, OwnerId, armyMen, capitalOf } from '../game/GameState';
+import { Army, GameState, OwnerId, armyMen, capitalOf } from '../game/GameState';
 import { seasonOf } from '../game/SeasonSystem';
+import { GROUND_K, hasSprite, placeSprite } from '../render/Sprites';
 import { DECOR_ANCHOR_Y, staticLayerCanvas } from '../render/TerrainArt';
 import { HEX, HEX_W, TEX_SCALE } from '../render/TextureFactory';
 import { hexCenter, hexCorners, neighborAcrossEdge, neighbors } from '../world/HexMap';
 import { FOG_VARIANTS, GROUND_VARIANTS, TERRAIN_VARIANTS } from './BootScene';
+import { armyFigures } from './figures';
 
 const INV = 1 / TEX_SCALE;
+/**
+ * Döntött (2,5D) nézet: a talaj síkja függőlegesen K-szorosára rövidül, a rajta álló
+ * modellek pedig ugyanebből a kameraszögből készültek, így pontosan illeszkednek rá.
+ */
+const K = GROUND_K;
 const colorOf = (o: OwnerId | null) => (o && o !== 'neutral' ? FACTIONS[o].color : NEUTRAL_COLOR);
 const LABEL: Phaser.Types.GameObjects.Text.TextStyle = {
   fontFamily: 'Georgia, "Times New Roman", serif', fontSize: '13px', color: '#f6ecd0', stroke: '#14100a', strokeThickness: 4,
 };
+/** Rétegek. Az álló tárgyak (domborzat, városok, seregek) a talajon elfoglalt helyük szerint takarják egymást. */
+const DEPTH = { ground: 0, statics: 1, glint: 1.5, owner: 2, highlight: 3, objects: 4, labels: 6.2, clouds: 6.4, motes: 6.6, fog: 7, selection: 8, fx: 9 };
+const BIAS = { decor: 0, feature: 0.0002, city: 0.0004, army: 0.0006 };
 
-interface ArmyView { box: Phaser.GameObjects.Container; token: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; dot: Phaser.GameObjects.Arc; owner: OwnerId }
+/** A városok nagyobbak a méretarányosnál (szintenként): ezek a térkép legfontosabb tájékozódási pontjai. */
+const CITY_SCALE = [1.5, 1.4, 1.3, 1.2, 1.15];
+const UNIT_SCALE = 0.9;
+/** A figurák helye a seregen belül (hátsó sorból előre), a figurák száma szerint. */
+const SLOTS: { x: number; y: number }[][] = [
+  [{ x: 0, y: 2 }],
+  [{ x: -11, y: -3 }, { x: 11, y: 4 }],
+  [{ x: -14, y: -6 }, { x: 13, y: -3 }, { x: -1, y: 8 }],
+];
+interface ArmyView {
+  body: Phaser.GameObjects.Container;
+  tag: Phaser.GameObjects.Container;
+  label: Phaser.GameObjects.Text;
+  dot: Phaser.GameObjects.Arc;
+  owner: OwnerId;
+  sig: string;
+}
 
 /** A stratégiai világtérkép megjelenítése és kezelése (egér, görgő, érintés, kétujjas nagyítás). */
 export class WorldMapScene extends Phaser.Scene {
@@ -26,15 +52,17 @@ export class WorldMapScene extends Phaser.Scene {
   private ownerG!: Phaser.GameObjects.Graphics;
   private hiG!: Phaser.GameObjects.Graphics;
   private selG!: Phaser.GameObjects.Graphics;
-  private featureLayer!: Phaser.GameObjects.Container;
-  private cityLayer!: Phaser.GameObjects.Container;
-  private armyLayer!: Phaser.GameObjects.Container;
+  private labelLayer!: Phaser.GameObjects.Container;
+  private features: Phaser.GameObjects.GameObject[] = [];
+  private cityObjs: Phaser.GameObjects.GameObject[] = [];
   private armies = new Map<string, ArmyView>();
   private featureSig = '';
   private citySig = '';
   private season = '';
+  private mapW = 11;
   private worldW = HEX_W * 11.5;
-  private worldH = HEX * 1.5 * 10 + HEX * 2;
+  /** A térkép magassága a döntött nézetben. */
+  private viewH = (HEX * 1.5 * 10 + HEX * 2) * K;
   private userZoom = 1;
   private drag = { active: false, moved: false, x: 0, y: 0, id: -1 };
   private pinch = { active: false, dist: 0, zoom: 1 };
@@ -45,36 +73,38 @@ export class WorldMapScene extends Phaser.Scene {
   create() {
     const app = getApp();
     const s = app.state!;
-    this.tileImgs = []; this.decorImgs = []; this.motes = []; this.fogImgs = []; this.armies.clear();
+    this.tileImgs = []; this.decorImgs = []; this.motes = []; this.fogImgs = []; this.features = []; this.cityObjs = [];
+    this.armies.clear();
     this.featureSig = ''; this.citySig = ''; this.season = '';
+    this.mapW = s.width;
     this.worldW = HEX_W * (s.width + 0.5);
-    this.worldH = HEX * 1.5 * (s.height - 1) + HEX * 2;
+    this.viewH = (HEX * 1.5 * (s.height - 1) + HEX * 2) * K;
 
     s.tiles.forEach((_t, i) => {
-      const { x, y } = hexCenter(i, HEX, s.width);
-      this.tileImgs.push(this.add.image(x, y, '__DEFAULT').setScale(INV).setDepth(0));
+      const { x, y } = this.pos(i);
+      this.tileImgs.push(this.add.image(x, y, '__DEFAULT').setScale(INV, INV * K).setDepth(DEPTH.ground));
     });
     if (this.textures.exists('static-map')) this.textures.remove('static-map');
     this.textures.addCanvas('static-map', staticLayerCanvas(s.tiles, s.width, s.height));
-    this.add.image(0, 0, 'static-map').setOrigin(0).setScale(INV).setDepth(1);
-    this.ownerG = this.add.graphics().setDepth(2);
-    this.hiG = this.add.graphics().setDepth(3);
-    this.featureLayer = this.add.container(0, 0).setDepth(4.5);
+    this.add.image(0, 0, 'static-map').setOrigin(0).setScale(INV, INV * K).setDepth(DEPTH.statics);
+    // A talajra rajzolt rétegek a talajjal együtt rövidülnek.
+    this.ownerG = this.add.graphics().setDepth(DEPTH.owner).setScale(1, K);
+    this.hiG = this.add.graphics().setDepth(DEPTH.highlight).setScale(1, K);
     s.tiles.forEach((tile, i) => {
-      const { x, y } = hexCenter(i, HEX, s.width);
-      this.decorImgs.push(this.add.image(x, y, '__DEFAULT').setOrigin(0.5, DECOR_ANCHOR_Y).setScale(INV).setDepth(4 + y * 0.0001).setVisible(!tile.cityId));
+      const { x, y } = this.pos(i);
+      this.decorImgs.push(this.add.image(x, y, '__DEFAULT').setOrigin(0.5, DECOR_ANCHOR_Y).setScale(INV)
+        .setDepth(this.objectDepth(y, BIAS.decor)).setVisible(!tile.cityId));
     });
-    this.cityLayer = this.add.container(0, 0).setDepth(5);
-    this.armyLayer = this.add.container(0, 0).setDepth(6);
+    this.labelLayer = this.add.container(0, 0).setDepth(DEPTH.labels);
     const animate = app.settings.quality !== 'low';
     if (animate) this.addAmbience(s);
     s.tiles.forEach((_t, i) => {
-      const { x, y } = hexCenter(i, HEX, s.width);
-      const fog = this.add.image(x, y, `fog-${i % FOG_VARIANTS}`).setScale(INV).setDepth(7);
-      if (animate) this.tweens.add({ targets: fog, scale: INV * 1.12, duration: 4200 + (i % 7) * 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      const { x, y } = this.pos(i);
+      const fog = this.add.image(x, y, `fog-${i % FOG_VARIANTS}`).setScale(INV, INV * K).setDepth(DEPTH.fog);
+      if (animate) this.tweens.add({ targets: fog, scaleX: INV * 1.12, scaleY: INV * K * 1.12, duration: 4200 + (i % 7) * 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       this.fogImgs.push(fog);
     });
-    this.selG = this.add.graphics().setDepth(8);
+    this.selG = this.add.graphics().setDepth(DEPTH.selection).setScale(1, K);
 
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.onDown, this);
@@ -85,7 +115,7 @@ export class WorldMapScene extends Phaser.Scene {
     this.scale.on('resize', this.onResize, this);
     this.events.once('shutdown', () => this.scale.off('resize', this.onResize, this));
 
-    this.userZoom = Math.max(this.minZoom(), Math.min(1.15, this.fitZoom() * 1.9));
+    this.userZoom = Math.max(this.minZoom(), Math.min(1.25, this.fitZoom() * 1.9));
     this.applyZoom();
     const cap = capitalOf(s, s.playerId);
     this.centerOn(cap ? cap.tile : Math.floor(s.tiles.length / 2));
@@ -93,11 +123,22 @@ export class WorldMapScene extends Phaser.Scene {
     this.refresh();
   }
 
+  // ---------- Vetítés ----------
+  /** A mező közepe a képernyő síkjában (a talaj rövidülésével). */
+  private pos(tile: number) {
+    const c = hexCenter(tile, HEX, this.mapW);
+    return { x: c.x, y: c.y * K };
+  }
+  /** Az álló tárgyak sorrendje: ami lejjebb (a nézőhöz közelebb) áll, az takar. */
+  private objectDepth(y: number, bias: number) {
+    return DEPTH.objects + (y / this.viewH) * 0.9 + bias;
+  }
+
   // ---------- Kamera ----------
   private dpr() { return pixelRatio(getApp().settings.quality); }
   private fitZoom() {
     const cam = this.cameras.main, d = this.dpr();
-    return Math.min(cam.width / d / this.worldW, cam.height / d / this.worldH);
+    return Math.min(cam.width / d / this.worldW, cam.height / d / this.viewH);
   }
   private minZoom() { return this.fitZoom() * 0.8; }
   private applyZoom() {
@@ -107,14 +148,14 @@ export class WorldMapScene extends Phaser.Scene {
   private clampScroll() {
     const cam = this.cameras.main;
     const cx = Phaser.Math.Clamp(cam.scrollX + cam.width / 2, 0, this.worldW);
-    const cy = Phaser.Math.Clamp(cam.scrollY + cam.height / 2, 0, this.worldH);
+    const cy = Phaser.Math.Clamp(cam.scrollY + cam.height / 2, 0, this.viewH);
     cam.setScroll(cx - cam.width / 2, cy - cam.height / 2);
     getApp().ui.minimapDirty();
   }
-  /** A kamera által látott világrész (a minitérkép keretéhez). */
+  /** A kamera által látott terület a térkép (rövidülés nélküli) koordinátáiban, a minitérképhez. */
   viewRect() {
     const cam = this.cameras.main, w = cam.width / cam.zoom, h = cam.height / cam.zoom;
-    return { x: cam.scrollX + cam.width / 2 - w / 2, y: cam.scrollY + cam.height / 2 - h / 2, w, h };
+    return { x: cam.scrollX + cam.width / 2 - w / 2, y: (cam.scrollY + cam.height / 2 - h / 2) / K, w, h: h / K };
   }
   private toWorld(px: number, py: number) {
     const cam = this.cameras.main;
@@ -143,20 +184,22 @@ export class WorldMapScene extends Phaser.Scene {
     return { x: right / 2, y: (top + Math.max(top + 40, bottom)) / 2 };
   }
   centerOn(tile: number) {
-    const { x, y } = hexCenter(tile, HEX, getApp().state!.width);
+    const { x, y } = this.pos(tile);
     const cam = this.cameras.main, c = this.viewCenter(), d = this.dpr();
     cam.setScroll(x - cam.width / 2 - (c.x * d - cam.width / 2) / cam.zoom, y - cam.height / 2 - (c.y * d - cam.height / 2) / cam.zoom);
     this.clampScroll();
   }
   private onResize() { this.applyZoom(); this.clampScroll(); }
 
+  /** A képernyőpont alatti mező: a talaj síkjára visszavetítve a legközelebbi középpont. */
   private tileAt(px: number, py: number): number {
     const s = getApp().state!;
     const w = this.toWorld(px, py);
+    const gy = w.y / K;
     let best = -1, bd = HEX * HEX;
     for (let i = 0; i < s.tiles.length; i++) {
       const c = hexCenter(i, HEX, s.width);
-      const d = (c.x - w.x) ** 2 + (c.y - w.y) ** 2;
+      const d = (c.x - w.x) ** 2 + (c.y - gy) ** 2;
       if (d < bd) { bd = d; best = i; }
     }
     return best;
@@ -212,6 +255,7 @@ export class WorldMapScene extends Phaser.Scene {
   }
 
   // ---------- Rajzolás ----------
+  /** Hatszög körvonala a talaj (rövidülés nélküli) koordinátáiban; a réteg maga rövidül. */
   private hexPoly(g: Phaser.GameObjects.Graphics, i: number, size: number, w: number) {
     const c = hexCenter(i, HEX, w);
     g.beginPath();
@@ -222,19 +266,19 @@ export class WorldMapScene extends Phaser.Scene {
   /** Hangulatelemek: vonuló felhőárnyékok, lebegő fényszemcsék, vízcsillanás. */
   private addAmbience(s: GameState) {
     for (let i = 0; i < 6; i++) {
-      const y = (this.worldH / 6) * i + Math.random() * 120;
-      const cloud = this.add.image(-400 - Math.random() * 600, y, 'cloud').setScale(2.2 + Math.random() * 1.6, 1.3 + Math.random()).setDepth(6.4).setAlpha(0.55);
+      const y = (this.viewH / 6) * i + Math.random() * 80;
+      const cloud = this.add.image(-400 - Math.random() * 600, y, 'cloud').setScale(2.2 + Math.random() * 1.6, 0.9 + Math.random() * 0.7).setDepth(DEPTH.clouds).setAlpha(0.55);
       this.tweens.add({ targets: cloud, x: this.worldW + 500, duration: 60000 + Math.random() * 50000, repeat: -1, delay: i * 5000 });
     }
     for (let i = 0; i < 34; i++) {
-      const mote = this.add.image(Math.random() * this.worldW, Math.random() * this.worldH, 'mote-spring').setDepth(6.6).setAlpha(0).setScale(0.5 + Math.random() * 0.6);
+      const mote = this.add.image(Math.random() * this.worldW, Math.random() * this.viewH, 'mote-spring').setDepth(DEPTH.motes).setAlpha(0).setScale(0.5 + Math.random() * 0.6);
       this.motes.push(mote);
       this.tweens.add({ targets: mote, alpha: 0.85, y: mote.y - 30 - Math.random() * 40, x: mote.x + (Math.random() - 0.5) * 50, duration: 3200 + Math.random() * 3600, yoyo: true, repeat: -1, delay: Math.random() * 5000, ease: 'Sine.easeInOut' });
     }
     s.tiles.forEach((tile, i) => {
       if (!tile.river || i % 2) return;
-      const { x, y } = hexCenter(i, HEX, s.width);
-      const glint = this.add.image(x + ((i * 13) % 20) - 10, y + 11, 'glint').setDepth(1.5).setAlpha(0).setScale(0.6, 0.35);
+      const { x, y } = this.pos(i);
+      const glint = this.add.image(x + ((i * 13) % 20) - 10, y + 11 * K, 'glint').setDepth(DEPTH.glint).setAlpha(0).setScale(0.6, 0.25);
       this.tweens.add({ targets: glint, alpha: 0.9, scaleX: 1.2, duration: 900 + (i % 5) * 300, yoyo: true, repeat: -1, delay: (i * 370) % 4000, hold: 100, repeatDelay: 1500 + (i % 4) * 700 });
     });
   }
@@ -263,57 +307,96 @@ export class WorldMapScene extends Phaser.Scene {
   }
 
   private drawFeatures(s: GameState) {
-    const sig = s.tiles.map(t => `${t.resource ?? ''}${t.ruin ? 'r' : ''}`).join(',');
+    const sig = s.tiles.map((t, i) => `${t.resource ?? ''}${t.ruin ? 'r' : ''}${s.explored[i] ? 'e' : ''}`).join(',');
     if (sig === this.featureSig) return;
     this.featureSig = sig;
-    this.featureLayer.removeAll(true);
+    for (const o of this.features) o.destroy();
+    this.features = [];
     s.tiles.forEach((tile, i) => {
-      const { x, y } = hexCenter(i, HEX, s.width);
-      if (tile.ruin) this.featureLayer.add(this.add.image(x, y - 2, 'ruin').setScale(INV * 1.15));
-      if (tile.resource) this.featureLayer.add(this.add.image(x - 30, y + 24, `res-${tile.resource}`).setScale(INV * 0.85));
+      if (!s.explored[i]) return;
+      const { x, y } = this.pos(i);
+      if (tile.ruin) this.features.push(this.add.image(x, y - 6, 'ruin').setScale(INV * 1.15).setDepth(this.objectDepth(y, BIAS.feature)));
+      if (tile.resource) this.features.push(this.add.image(x - 32, y + 15, `res-${tile.resource}`).setScale(INV * 0.85).setDepth(this.objectDepth(y + 15, BIAS.feature)));
     });
   }
 
   private drawCities(s: GameState) {
-    const sig = s.cities.map(c => `${c.id}:${c.owner}:${c.level}:${c.name}`).join(',');
+    const sig = s.cities.map(c => `${c.id}:${c.owner}:${c.level}:${c.name}:${s.explored[c.tile] ? 1 : 0}`).join(',');
     if (sig === this.citySig) return;
     this.citySig = sig;
-    this.cityLayer.removeAll(true);
+    for (const o of this.cityObjs) o.destroy();
+    this.cityObjs = [];
     for (const c of s.cities) {
-      const { x, y } = hexCenter(c.tile, HEX, s.width);
-      this.cityLayer.add(this.add.image(x, y - 14, `city-${c.level}`).setScale(INV * 1.22));
-      this.cityLayer.add(this.add.image(x - 30, y - 34, `flag-${c.owner}`).setScale(INV));
-      const label = this.add.text(x, y + 30, (c.capitalOf ? '★ ' : '') + c.name, LABEL).setOrigin(0.5).setResolution(3);
-      this.cityLayer.add(label);
+      // A feltáratlan vidék városa nem látszik: a magas épületek kilógnának a köd alól.
+      if (!s.explored[c.tile]) continue;
+      const { x, y } = this.pos(c.tile);
+      const name = `city-${c.level}-${c.owner}`;
+      const depth = this.objectDepth(y, BIAS.city);
+      if (hasSprite(name)) {
+        this.cityObjs.push(placeSprite(this.add.image(x, y, '__DEFAULT'), name, CITY_SCALE[c.level - 1]).setDepth(depth));
+      } else {
+        this.cityObjs.push(this.add.image(x, y - 14, `city-${c.level}`).setScale(INV * 1.22).setDepth(depth));
+        this.cityObjs.push(this.add.image(x - 30, y - 34, `flag-${c.owner}`).setScale(INV).setDepth(depth));
+      }
+      const label = this.add.text(x, y + 38, (c.capitalOf ? '★ ' : '') + c.name, LABEL).setOrigin(0.5).setResolution(3);
+      this.labelLayer.add(label);
+      this.cityObjs.push(label);
     }
+  }
+
+  /** A sereg teste: frakciószínű talp, hadijelvény és az összetétel szerinti figurák. */
+  private buildArmyBody(body: Phaser.GameObjects.Container, a: Army) {
+    body.removeAll(true);
+    const col = colorOf(a.owner);
+    const base = this.add.graphics();
+    base.fillStyle(0x0c0a08, 0.4); base.fillEllipse(0, 3, 64, 64 * K);
+    base.fillStyle(col, 0.5); base.fillEllipse(0, 2, 56, 56 * K);
+    base.lineStyle(2, col, 0.95); base.strokeEllipse(0, 2, 56, 56 * K);
+    body.add(base);
+    const figures = armyFigures(a).filter(type => hasSprite(`unit-${type}-${a.owner}`));
+    if (!figures.length) {
+      body.add(this.add.image(0, -14, `token-${a.owner}`).setScale(INV * 0.92));
+      return;
+    }
+    if (hasSprite(`banner-${a.owner}`)) body.add(placeSprite(this.add.image(4, -12, '__DEFAULT'), `banner-${a.owner}`, UNIT_SCALE));
+    const slots = SLOTS[figures.length - 1];
+    figures.forEach((type, i) => body.add(placeSprite(this.add.image(slots[i].x, slots[i].y, '__DEFAULT'), `unit-${type}-${a.owner}`, UNIT_SCALE)));
   }
 
   private syncArmies(s: GameState, visible: boolean[]) {
     const alive = new Set<string>();
     for (const a of s.armies) {
       alive.add(a.id);
-      const { x, y } = hexCenter(a.tile, HEX, s.width);
+      const p = this.pos(a.tile);
+      // Városban a sereg a város elé áll.
       const hasCity = !!s.tiles[a.tile].cityId;
-      const tx = x + (hasCity ? 30 : 0), ty = y + (hasCity ? -6 : -4);
+      const tx = p.x + (hasCity ? 38 : 0), ty = p.y + (hasCity ? 14 : 2);
+      const lx = tx + (hasCity ? 34 : 0), ly = ty + (hasCity ? -34 : 0);
       let v = this.armies.get(a.id);
-      if (v && v.owner !== a.owner) { v.box.destroy(); this.armies.delete(a.id); v = undefined; }
+      if (v && v.owner !== a.owner) { v.body.destroy(); v.tag.destroy(); this.armies.delete(a.id); v = undefined; }
       if (!v) {
-        const token = this.add.image(0, 0, `token-${a.owner}`).setScale(INV * 0.92);
-        const label = this.add.text(0, 24, '', { ...LABEL, fontSize: '12px' }).setOrigin(0.5).setResolution(3);
-        const dot = this.add.circle(15, -20, 5, 0x7be08a).setStrokeStyle(1.5, 0x14100a);
-        const box = this.add.container(tx, ty, [token, label, dot]);
-        this.armyLayer.add(box);
-        v = { box, token, label, dot, owner: a.owner };
+        const body = this.add.container(tx, ty);
+        const emblem = this.add.image(-17, 21, `token-${a.owner}`).setScale(INV * 0.34);
+        const label = this.add.text(2, 21, '', { ...LABEL, fontSize: '12px' }).setOrigin(0.5).setResolution(3);
+        const dot = this.add.circle(22, 21, 4.5, 0x7be08a).setStrokeStyle(1.5, 0x14100a);
+        const tag = this.add.container(lx, ly, [emblem, label, dot]);
+        this.labelLayer.add(tag);
+        v = { body, tag, label, dot, owner: a.owner, sig: '' };
         this.armies.set(a.id, v);
-      } else if (v.box.x !== tx || v.box.y !== ty) {
-        this.tweens.killTweensOf(v.box);
-        this.tweens.add({ targets: v.box, x: tx, y: ty, duration: 240, ease: 'Sine.easeOut' });
+      } else if (v.body.x !== tx || v.body.y !== ty) {
+        this.tweens.killTweensOf([v.body, v.tag]);
+        this.tweens.add({ targets: v.body, x: tx, y: ty, duration: 240, ease: 'Sine.easeOut' });
+        this.tweens.add({ targets: v.tag, x: lx, y: ly, duration: 240, ease: 'Sine.easeOut' });
       }
+      const sig = armyFigures(a).join(',');
+      if (sig !== v.sig) { v.sig = sig; this.buildArmyBody(v.body, a); }
+      v.body.setDepth(this.objectDepth(ty, BIAS.army));
       v.label.setText(String(armyMen(a)));
       v.dot.setVisible(a.owner === s.playerId && a.moves > 0);
-      v.box.setVisible(visible[a.tile]);
+      v.body.setVisible(visible[a.tile]);
+      v.tag.setVisible(visible[a.tile]);
     }
-    for (const [id, v] of this.armies) if (!alive.has(id)) { v.box.destroy(); this.armies.delete(id); }
+    for (const [id, v] of this.armies) if (!alive.has(id)) { v.body.destroy(); v.tag.destroy(); this.armies.delete(id); }
   }
 
   private drawHighlights(s: GameState) {
@@ -336,7 +419,7 @@ export class WorldMapScene extends Phaser.Scene {
         if (a.owner !== s.playerId) continue;
         const c = hexCenter(a.tile, HEX, s.width);
         g.lineStyle(5, a.supply >= 60 ? 0x59d98a : a.supply >= 30 ? 0xe8c84a : 0xe2553f, 1);
-        g.strokeCircle(c.x, c.y - 4, 30);
+        g.strokeCircle(c.x, c.y, 34);
       }
     }
     const reach = app.reach;
@@ -404,7 +487,8 @@ export class WorldMapScene extends Phaser.Scene {
       });
       for (const m of this.motes) m.setTexture(`mote-${season}`);
     }
-    s.tiles.forEach((tile, i) => this.decorImgs[i].setVisible(!tile.cityId));
+    // A feltáratlan mezők domborzata rejtve marad, különben a csúcsok kilógnának a köd alól.
+    s.tiles.forEach((tile, i) => this.decorImgs[i].setVisible(!tile.cityId && s.explored[i]));
     this.drawOwnership(s, s.explored);
     this.drawFeatures(s);
     this.drawCities(s);
@@ -418,8 +502,8 @@ export class WorldMapScene extends Phaser.Scene {
   pulse(tile: number, color: number) {
     const s = getApp().state;
     if (!s || !this.sys.isActive()) return;
-    const { x, y } = hexCenter(tile, HEX, s.width);
-    const ring = this.add.circle(x, y, 20, color, 0.5).setDepth(9);
-    this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 520, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+    const { x, y } = this.pos(tile);
+    const ring = this.add.circle(x, y, 20, color, 0.5).setDepth(DEPTH.fx).setScale(1, K);
+    this.tweens.add({ targets: ring, scaleX: 3.2, scaleY: 3.2 * K, alpha: 0, duration: 520, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
   }
 }

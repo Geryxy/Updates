@@ -8,7 +8,8 @@ import {
 import { cityEconomy } from '../game/EconomySystem';
 import { BuildingId, UnitType, cityById } from '../game/GameState';
 import { t } from '../i18n';
-import { unitIconUrl } from '../render/TextureFactory';
+import { spriteUrl } from '../render/Sprites';
+import { unitImg } from './ArmyPanel';
 import { bar, btn, costHtml, esc, pct, resIcon } from './dom';
 import { actions, modals } from './registry';
 
@@ -35,7 +36,8 @@ modals.city = {
       const eco = cityEconomy(s, c);
       const up = upgradeCost(s, c);
       const chk = canUpgrade(s, c);
-      body = `<div class="grid2">
+      body = `<div class="city-hero"><img src="${spriteUrl(`city-${c.level}-${c.owner}`)}" alt="${t(`city.level.${c.level}`)}"></div>
+        <div class="grid2">
           <div class="row"><span>${t('city.level')}</span><b>${t(`city.level.${c.level}`)} (${c.level}/5)</b></div>
           <div class="row"><span>${t('city.pop')}</span><b>${Math.floor(c.pop * 100)} / ${popCapOf(c) * 100}</b></div>
           <div class="row"><span>${t('city.happiness')}</span>${bar(c.happiness, c.happiness < 35 ? 'bad' : 'green')}<b>${Math.round(c.happiness)}</b></div>
@@ -47,7 +49,7 @@ modals.city = {
         <h3>${t('city.buildings')} <small>${c.buildings.length} / ${slotsOf(s, c)} ${t('city.slots')}</small></h3>
         <ul class="chips">${c.buildings.map(b => `<li title="${t(`bld.${b}.desc`)}">${t(`bld.${b}`)}</li>`).join('') || `<li class="muted">${t('ui.nothing')}</li>`}</ul>
         <h3>${t('city.upgrade')}</h3>
-        ${up ? `<div class="item"><div><b>${t('city.upgradeTo', { level: t(`city.level.${c.level + 1}`) })}</b>
+        ${up ? `<div class="item"><img class="city-next" src="${spriteUrl(`city-${c.level + 1}-${c.owner}`)}" alt=""><div><b>${t('city.upgradeTo', { level: t(`city.level.${c.level + 1}`) })}</b>
             <small>${t('city.upgradeDesc', { slots: CITY_LEVELS[c.level].slots, pop: CITY_LEVELS[c.level].popCap * 100 })}</small>
             ${costHtml(up, res)} <small>${t('ui.turns', { n: CITY_LEVELS[c.level - 1].turns })}</small>
             ${chk.ok ? '' : `<small class="why">${esc(chk.reason ?? '')}</small>`}</div>
@@ -71,7 +73,7 @@ modals.city = {
       body = `<h3>${t('city.training')} <small>${c.training.length} / ${MAX_TRAINING}</small></h3>${training}` + UNIT_TYPES.map(u => {
         const def = UNITS[u];
         const chk = canRecruit(s, c, u);
-        return `<div class="item"><img class="unit-ico" src="${unitIconUrl(u)}" alt=""><div><b>${t(`unit.${u}`)}</b><small>${t(`unit.${u}.desc`)}</small>
+        return `<div class="item">${unitImg(u, s.playerId, 'unit-ico')}<div><b>${t(`unit.${u}`)}</b><small>${t(`unit.${u}.desc`)}</small>
           <small class="stats">${t('unit.stats', { a: def.attack, d: def.defense, m: def.move })} · ${t('unit.upkeep')}: ${resIcon('food')}${def.upkeep.food} ${resIcon('gold')}${def.upkeep.gold}</small>
           ${costHtml(unitCost(s, s.playerId, u), res)} <small>${t('ui.turns', { n: def.trainTurns })} · ${t('unit.popCost')}</small>
           ${chk.ok ? '' : `<small class="why">${esc(chk.reason ?? '')}</small>`}</div>

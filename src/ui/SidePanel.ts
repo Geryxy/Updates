@@ -3,6 +3,7 @@ import { cityFort, popCapOf } from '../game/CitySystem';
 import { City, RES_KEYS, armyAt, cityAt } from '../game/GameState';
 import { t } from '../i18n';
 import { toQR } from '../world/HexMap';
+import { spriteUrl } from '../render/Sprites';
 import { DEPOSIT_BONUS, TERRAIN } from '../world/TerrainTypes';
 import { renderArmy } from './ArmyPanel';
 import { ICON, bar, btn, esc, pct, resIcon } from './dom';
@@ -10,7 +11,8 @@ import { ICON, bar, btn, esc, pct, resIcon } from './dom';
 function cityBlock(app: GameApp, c: City): string {
   const s = app.state!;
   const own = c.owner === s.playerId;
-  let body = `<div class="row"><span>${t('city.level')}</span><b>${t(`city.level.${c.level}`)}</b></div>
+  let body = `<img class="city-thumb" src="${spriteUrl(`city-${c.level}-${c.owner}`)}" alt="">
+    <div class="row"><span>${t('city.level')}</span><b>${t(`city.level.${c.level}`)}</b></div>
     <div class="row"><span>${t('city.defense')}</span><b>+${pct(cityFort(c))}</b></div>`;
   if (own) {
     const b = c.build;

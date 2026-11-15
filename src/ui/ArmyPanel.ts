@@ -2,15 +2,19 @@ import type { GameApp } from '../app/GameApp';
 import { FOUND_CITY_COST } from '../data/buildings';
 import { UNITS } from '../data/units';
 import { canFoundCity, createArmy, foundCity } from '../game/CitySystem';
-import { Army, armyById, armyMen } from '../game/GameState';
+import { Army, OwnerId, armyById, armyMen } from '../game/GameState';
 import { maxMoves, splitArmy } from '../game/MovementSystem';
 import { t } from '../i18n';
-import { unitIconUrl } from '../render/TextureFactory';
+import { spriteUrl } from '../render/Sprites';
 import { bar, btn, costHtml, esc } from './dom';
 import { actions } from './registry';
 
-export const squadRow = (q: { type: keyof typeof UNITS; count: number }, extra = '') =>
-  `<li class="squad"><img class="ico" src="${unitIconUrl(q.type)}" alt=""><span>${t(`unit.${q.type}`)}</span><b>${q.count}</b>${extra}</li>`;
+/** Az egységtípus 3D-s képe a tulajdonos színeiben. */
+export const unitImg = (type: keyof typeof UNITS, owner: OwnerId, cls = 'unit-pic') =>
+  `<img class="${cls}" src="${spriteUrl(`unit-${type}-${owner}`)}" alt="" loading="lazy">`;
+
+export const squadRow = (q: { type: keyof typeof UNITS; count: number }, owner: OwnerId, extra = '') =>
+  `<li class="squad">${unitImg(q.type, owner)}<span>${t(`unit.${q.type}`)}</span><b>${q.count}</b>${extra}</li>`;
 
 const fmtMoves = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
@@ -22,12 +26,12 @@ export function renderArmy(app: GameApp, a: Army): string {
   if (!own) {
     return `<section class="block army">${head}
       <div class="row"><span>${t('army.men')}</span><b>${armyMen(a)}</b></div>
-      <ul class="squads">${a.squads.map(q => squadRow(q)).join('')}</ul></section>`;
+      <ul class="squads">${a.squads.map(q => squadRow(q, a.owner)).join('')}</ul></section>`;
   }
   const found = canFoundCity(s, a);
   const canSplit = a.squads.length > 1;
   const squads = a.squads.map((q, i) =>
-    squadRow(q, canSplit ? `<button class="mini" data-act="army:split" data-arg="${a.id}|${i}" title="${t('army.split')}">⇲</button>` : '')).join('');
+    squadRow(q, a.owner, canSplit ? `<button class="mini" data-act="army:split" data-arg="${a.id}|${i}" title="${t('army.split')}">⇲</button>` : '')).join('');
   return `<section class="block army">${head}
     <div class="row"><span>${t('army.men')}</span><b>${armyMen(a)} · ${a.squads.length}/6 ${t('army.squads')}</b></div>
     <div class="row"><span>${t('army.morale')}</span>${bar(a.morale, a.morale < 40 ? 'bad' : '')}<b>${a.morale}</b></div>

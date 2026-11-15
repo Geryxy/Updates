@@ -17,7 +17,7 @@ export function createPhaser(parent: HTMLElement, quality: Settings['quality']):
     banner: false,
     audio: { noAudio: true },
     input: { activePointers: 3 },
-    render: { antialias: true, powerPreference: 'high-performance' },
+    render: { antialias: true, powerPreference: 'high-performance', mipmapFilter: 'LINEAR_MIPMAP_LINEAR' },
     scale: { mode: Phaser.Scale.NONE, width: Math.round(parent.clientWidth * dpr), height: Math.round(parent.clientHeight * dpr), zoom: 1 / dpr },
     scene: [BootScene, MenuScene, WorldMapScene],
   });

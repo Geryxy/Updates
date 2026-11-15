@@ -4,3 +4,7 @@ src-tauri/target
 src-tauri/gen
 *.log
 .DS_Store
+
+# Blender-renderek gyorsítótára
+tools/blender/.cache
+__pycache__

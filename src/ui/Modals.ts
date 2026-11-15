@@ -4,7 +4,7 @@ import { BattlePreview } from '../game/CombatSystem';
 import { respondProposal } from '../game/DiplomacySystem';
 import { computeIncome } from '../game/EconomySystem';
 import { choiceAffordable, eventDef, resolvePlayerEvent } from '../game/EventSystem';
-import { BattleReport, BattleSide, PowerPart, RES_KEYS, Squad, armyMen, citiesOf, tilesOf } from '../game/GameState';
+import { BattleReport, BattleSide, OwnerId, PowerPart, RES_KEYS, Squad, armyMen, citiesOf, tilesOf } from '../game/GameState';
 import { SEASONS, seasonOf } from '../game/SeasonSystem';
 import { capitalsHeld, territoryGoal } from '../game/VictorySystem';
 import { t } from '../i18n';
@@ -16,7 +16,7 @@ import { TUTORIAL_STEPS, computeTasks } from './Tasks';
 
 const partsHtml = (parts: PowerPart[]) => `<ul class="parts">${parts.map((p, i) =>
   `<li><span>${esc(p.label)}</span><b>${i === 0 ? p.mult.toFixed(1) : `×${p.mult.toFixed(2)}`}</b></li>`).join('')}</ul>`;
-const squadsHtml = (sq: Squad[]) => `<ul class="squads">${sq.map(q => squadRow(q)).join('') || `<li class="muted">–</li>`}</ul>`;
+const squadsHtml = (sq: Squad[], owner: OwnerId) => `<ul class="squads">${sq.map(q => squadRow(q, owner)).join('') || `<li class="muted">–</li>`}</ul>`;
 
 // ---------- Csata előtti képernyő ----------
 modals.battle = {
@@ -26,9 +26,9 @@ modals.battle = {
     const army = app.activeArmyObj();
     const pv: BattlePreview | null = app.battlePreview(tile);
     if (!army || !pv) return `<h2>${t('battle.gone')}</h2>`;
-    const side = (title: string, name: string, owner: string, sq: Squad[], power: number, parts: PowerPart[], loss: number) =>
-      `<div class="side-col"><h3><img src="${emblemUrl(owner as never)}" alt="">${title}</h3><b>${esc(name)}</b>
-        ${squadsHtml(sq)}<div class="power">${t('battle.power')}: <b>${power.toFixed(1)}</b></div>${partsHtml(parts)}
+    const side = (title: string, name: string, owner: OwnerId, sq: Squad[], power: number, parts: PowerPart[], loss: number) =>
+      `<div class="side-col"><h3><img src="${emblemUrl(owner)}" alt="">${title}</h3><b>${esc(name)}</b>
+        ${squadsHtml(sq, owner)}<div class="power">${t('battle.power')}: <b>${power.toFixed(1)}</b></div>${partsHtml(parts)}
         <div class="row"><span>${t('battle.estLoss')}</span><b class="neg">~${loss} ${t('battle.men')}</b></div></div>`;
     return `<h2>${t('battle.title')}</h2>
       <div class="versus">
@@ -54,8 +54,8 @@ modals.report = {
     const iWon = (r.winner === 'attacker' ? r.attacker.owner : r.defender.owner) === me;
     const side = (title: string, sd: BattleSide) =>
       `<div class="side-col"><h3><img src="${emblemUrl(sd.owner)}" alt="">${title}</h3><b>${esc(sd.name)}</b> <small>${t(`faction.${sd.owner}`)}</small>
-        <div class="row"><span>${t('battle.before')}</span><b>${armyMen({ squads: sd.before })}</b></div>${squadsHtml(sd.before)}
-        <div class="row"><span>${t('battle.after')}</span><b>${armyMen({ squads: sd.after })}</b></div>${squadsHtml(sd.after)}
+        <div class="row"><span>${t('battle.before')}</span><b>${armyMen({ squads: sd.before })}</b></div>${squadsHtml(sd.before, sd.owner)}
+        <div class="row"><span>${t('battle.after')}</span><b>${armyMen({ squads: sd.after })}</b></div>${squadsHtml(sd.after, sd.owner)}
         <div class="row"><span>${t('battle.losses')}</span><b class="neg">−${sd.losses}</b></div>
         <div class="row"><span>${t('battle.fateLabel')}</span><b>${t(`battle.fate.${sd.fate}`)}</b></div>
         <div class="power">${t('battle.power')}: <b>${sd.power.toFixed(1)}</b></div>${partsHtml(sd.parts)}</div>`;
