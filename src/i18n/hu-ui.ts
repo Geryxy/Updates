@@ -127,7 +127,7 @@ export const huUi: Record<string, string> = {
   'tut.0.title': 'A térkép használata', 'tut.0.short': 'Mozgasd a térképet, és jelöld ki a fővárosodat',
   'tut.0.text': 'Húzd a térképet (egérrel vagy ujjal), nagyíts görgővel vagy két ujjal, majd jelöld ki a csillaggal jelölt fővárosodat. A köd az ismeretlen vidéket takarja.',
   'tut.1.title': 'A gazdaság működése', 'tut.1.short': 'Nyisd meg a Gazdaság ablakot',
-  'tut.1.text': 'A felső sáv mutatja az öt erőforrást és körönkénti változásukat. Nyisd meg a Gazdaság ablakot (alsó sáv vagy G), és nézd meg, miből áll a bevételed. Télen az élelemtermelés megfeleződik!',
+  'tut.1.text': 'A felső sáv mutatja az öt erőforrást és körönkénti változásukat. Nyisd meg a Gazdaság ablakot (koppints egy erőforrásra a felső sávban, vagy nyomd meg a G-t), és nézd meg, miből áll a bevételed. Télen az élelemtermelés megfeleződik!',
   'tut.2.title': 'Építkezés', 'tut.2.short': 'Indíts el egy építkezést a fővárosban',
   'tut.2.text': 'Jelöld ki a fővárost, nyisd meg az Építés fület, és építs például fakopácstelepet vagy laktanyát. Az építkezés több körig tart, az építési helyek száma véges.',
   'tut.3.title': 'A hadsereg mozgatása', 'tut.3.short': 'Mozgasd a hadseregedet egy szomszédos mezőre',

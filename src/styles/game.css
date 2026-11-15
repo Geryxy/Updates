@@ -249,7 +249,9 @@ button.chip { min-height: 34px; }
   .meta { width: 100%; justify-content: space-between; } .chip { font-size: 12px; padding: 2px 8px; }
   #side { width: auto; margin: 0 6px 6px; max-height: 31vh; max-height: 31dvh; align-self: end; }
   #bottom { flex-wrap: wrap; gap: 6px; } .info { flex: 1 1 100%; } .tools { flex: 1; justify-content: space-between; } .zoom { display: none; }
-  .tools { min-width: 0; gap: 3px; } .tool { min-width: 0; flex: 1 1 0; padding: 3px 2px; } .end-turn { padding: 6px 10px; flex: none; gap: 5px; font-size: 15px; }
+  /* A Gazdaság ablak a felső sáv erőforrásaira koppintva is megnyílik, így álló módban a gombja elmaradhat. */
+  .tools .tool[data-arg="economy"] { display: none; }
+  .tools { min-width: 0; gap: 4px; } .tool { min-width: 44px; flex: 1 1 0; padding: 3px 2px; } .end-turn { padding: 6px 10px; flex: none; gap: 5px; font-size: 15px; }
   .versus, .branches { grid-template-columns: 1fr; }
   .backdrop { align-items: flex-end; padding: calc(8px + var(--sat)) 0 0; }
   .modal, .modal.wide { width: 100%; border-radius: 14px 14px 0 0; border-bottom: none; padding: 14px 14px calc(16px + var(--sab)); max-height: 92%; }
