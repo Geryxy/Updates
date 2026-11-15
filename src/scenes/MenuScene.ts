@@ -3,7 +3,8 @@ import { getApp } from '../app/context';
 import { HEX, TEX_SCALE } from '../render/TextureFactory';
 import { hexCenter } from '../world/HexMap';
 import { generateMap } from '../world/MapGenerator';
-import { FOG_VARIANTS, TERRAIN_VARIANTS } from './BootScene';
+import { DECOR_ANCHOR_Y } from '../render/TerrainArt';
+import { FOG_VARIANTS, GROUND_VARIANTS, TERRAIN_VARIANTS } from './BootScene';
 
 /** A főmenü háttere: lassan úszó, ködbe burkolt fantasy világtérkép. */
 export class MenuScene extends Phaser.Scene {
@@ -16,12 +17,17 @@ export class MenuScene extends Phaser.Scene {
     const inv = 1 / TEX_SCALE;
     map.tiles.forEach((tile, i) => {
       const { x, y } = hexCenter(i, HEX);
-      this.add.image(x, y, `t-${tile.terrain}-autumn-${i % TERRAIN_VARIANTS}`).setScale(inv);
+      this.add.image(x, y, `g-${tile.terrain}-autumn-${i % GROUND_VARIANTS}`).setScale(inv);
+    });
+    const special = new Set([...map.capitals, ...map.villages]);
+    map.tiles.forEach((tile, i) => {
+      const { x, y } = hexCenter(i, HEX);
+      if (!special.has(i)) this.add.image(x, y, `d-${tile.terrain}-autumn-${i % TERRAIN_VARIANTS}`).setOrigin(0.5, DECOR_ANCHOR_Y).setScale(inv);
       if (tile.ruin) this.add.image(x, y, 'ruin').setScale(inv);
     });
     [...map.capitals, ...map.villages].forEach((i, k) => {
       const { x, y } = hexCenter(i, HEX);
-      this.add.image(x, y - 8, `city-${k < 4 ? 4 : 2}`).setScale(inv);
+      this.add.image(x, y - 8, `city-${k < 4 ? 5 : 3}`).setScale(inv);
     });
     const animate = getApp().settings.quality !== 'low';
     map.tiles.forEach((_t, i) => {

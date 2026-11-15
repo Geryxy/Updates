@@ -9,6 +9,7 @@ import './DiplomacyPanel';
 import './ResearchPanel';
 import { renderBottom, renderTop } from './HUD';
 import { menuState, refreshSlots, renderMenu } from './MenuScreen';
+import { drawMinimap, minimapClick } from './Minimap';
 import { playOutcomeSound } from './Modals';
 import { settingsInput } from './SettingsPanel';
 import { renderSide } from './SidePanel';
@@ -23,12 +24,13 @@ export class UI {
   private el = {
     hud: document.getElementById('hud')!, top: document.getElementById('top')!, side: document.getElementById('side')!,
     bottom: document.getElementById('bottom')!, screen: document.getElementById('screen')!, modal: document.getElementById('modal-root')!,
-    toast: document.getElementById('toast')!, busy: document.getElementById('busy')!, fx: document.getElementById('season-fx')!,
+    toast: document.getElementById('toast')!, mini: document.getElementById('minimap') as HTMLCanvasElement, busy: document.getElementById('busy')!, fx: document.getElementById('season-fx')!,
   };
   private modal: OpenModal | null = null;
   private queue: OpenModal[] = [];
   private toastTimer = 0;
   private outcomeShown = false;
+  private miniQueued = false;
 
   constructor(private app: GameApp) {
     actions.open = (_a, [name, back]) => this.openModal(name, back ? { back } : {});
@@ -41,6 +43,9 @@ export class UI {
     // iOS Safari: a lap saját nagyítási és visszarugózó gesztusainak tiltása.
     document.addEventListener('gesturestart', e => e.preventDefault());
     document.addEventListener('dblclick', e => e.preventDefault());
+    const pick = (e: PointerEvent) => { if (e.buttons || e.type === 'pointerdown') minimapClick(this.app, this.el.mini, e.clientX, e.clientY); };
+    this.el.mini.addEventListener('pointerdown', pick);
+    this.el.mini.addEventListener('pointermove', pick);
     this.el.busy.innerHTML = `<div>${ICON.hourglass}<span>${t('ui.aiTurn')}</span></div>`;
   }
 
@@ -74,8 +79,16 @@ export class UI {
       this.el.side.scrollTop = scroll;
       this.el.bottom.innerHTML = renderBottom(app);
       this.el.fx.className = `fx-${seasonOf(app.state.turn)}${app.settings.quality === 'low' ? ' still' : ''}`;
+      drawMinimap(app, this.el.mini);
     }
     this.renderModal();
+  }
+
+  /** A kamera mozgásakor képkockánként legfeljebb egyszer rajzoljuk újra a minitérképet. */
+  minimapDirty() {
+    if (this.miniQueued) return;
+    this.miniQueued = true;
+    requestAnimationFrame(() => { this.miniQueued = false; drawMinimap(this.app, this.el.mini); });
   }
 
   // ---------- Felugró ablakok ----------

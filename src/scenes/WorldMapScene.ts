@@ -4,9 +4,10 @@ import { getApp } from '../app/context';
 import { FACTIONS, NEUTRAL_COLOR } from '../data/factions';
 import { GameState, OwnerId, armyMen, capitalOf } from '../game/GameState';
 import { seasonOf } from '../game/SeasonSystem';
+import { DECOR_ANCHOR_Y, staticLayerCanvas } from '../render/TerrainArt';
 import { HEX, HEX_W, TEX_SCALE } from '../render/TextureFactory';
 import { hexCenter, hexCorners, neighborAcrossEdge, neighbors } from '../world/HexMap';
-import { FOG_VARIANTS, TERRAIN_VARIANTS } from './BootScene';
+import { FOG_VARIANTS, GROUND_VARIANTS, TERRAIN_VARIANTS } from './BootScene';
 
 const INV = 1 / TEX_SCALE;
 const colorOf = (o: OwnerId | null) => (o && o !== 'neutral' ? FACTIONS[o].color : NEUTRAL_COLOR);
@@ -19,8 +20,9 @@ interface ArmyView { box: Phaser.GameObjects.Container; token: Phaser.GameObject
 /** A stratégiai világtérkép megjelenítése és kezelése (egér, görgő, érintés, kétujjas nagyítás). */
 export class WorldMapScene extends Phaser.Scene {
   private tileImgs: Phaser.GameObjects.Image[] = [];
+  private decorImgs: Phaser.GameObjects.Image[] = [];
+  private motes: Phaser.GameObjects.Image[] = [];
   private fogImgs: Phaser.GameObjects.Image[] = [];
-  private staticG!: Phaser.GameObjects.Graphics;
   private ownerG!: Phaser.GameObjects.Graphics;
   private hiG!: Phaser.GameObjects.Graphics;
   private selG!: Phaser.GameObjects.Graphics;
@@ -43,7 +45,7 @@ export class WorldMapScene extends Phaser.Scene {
   create() {
     const app = getApp();
     const s = app.state!;
-    this.tileImgs = []; this.fogImgs = []; this.armies.clear();
+    this.tileImgs = []; this.decorImgs = []; this.motes = []; this.fogImgs = []; this.armies.clear();
     this.featureSig = ''; this.citySig = ''; this.season = '';
     this.worldW = HEX_W * (s.width + 0.5);
     this.worldH = HEX * 1.5 * (s.height - 1) + HEX * 2;
@@ -52,21 +54,27 @@ export class WorldMapScene extends Phaser.Scene {
       const { x, y } = hexCenter(i, HEX, s.width);
       this.tileImgs.push(this.add.image(x, y, '__DEFAULT').setScale(INV).setDepth(0));
     });
-    this.staticG = this.add.graphics().setDepth(1);
+    if (this.textures.exists('static-map')) this.textures.remove('static-map');
+    this.textures.addCanvas('static-map', staticLayerCanvas(s.tiles, s.width, s.height));
+    this.add.image(0, 0, 'static-map').setOrigin(0).setScale(INV).setDepth(1);
     this.ownerG = this.add.graphics().setDepth(2);
-    this.featureLayer = this.add.container(0, 0).setDepth(3);
-    this.hiG = this.add.graphics().setDepth(4);
+    this.hiG = this.add.graphics().setDepth(3);
+    this.featureLayer = this.add.container(0, 0).setDepth(4.5);
+    s.tiles.forEach((tile, i) => {
+      const { x, y } = hexCenter(i, HEX, s.width);
+      this.decorImgs.push(this.add.image(x, y, '__DEFAULT').setOrigin(0.5, DECOR_ANCHOR_Y).setScale(INV).setDepth(4 + y * 0.0001).setVisible(!tile.cityId));
+    });
     this.cityLayer = this.add.container(0, 0).setDepth(5);
     this.armyLayer = this.add.container(0, 0).setDepth(6);
     const animate = app.settings.quality !== 'low';
+    if (animate) this.addAmbience(s);
     s.tiles.forEach((_t, i) => {
       const { x, y } = hexCenter(i, HEX, s.width);
       const fog = this.add.image(x, y, `fog-${i % FOG_VARIANTS}`).setScale(INV).setDepth(7);
-      if (animate) this.tweens.add({ targets: fog, scale: INV * 1.06, duration: 3000 + (i % 7) * 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      if (animate) this.tweens.add({ targets: fog, scale: INV * 1.12, duration: 4200 + (i % 7) * 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       this.fogImgs.push(fog);
     });
     this.selG = this.add.graphics().setDepth(8);
-    this.drawStatic(s);
 
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.onDown, this);
@@ -101,6 +109,12 @@ export class WorldMapScene extends Phaser.Scene {
     const cx = Phaser.Math.Clamp(cam.scrollX + cam.width / 2, 0, this.worldW);
     const cy = Phaser.Math.Clamp(cam.scrollY + cam.height / 2, 0, this.worldH);
     cam.setScroll(cx - cam.width / 2, cy - cam.height / 2);
+    getApp().ui.minimapDirty();
+  }
+  /** A kamera által látott világrész (a minitérkép keretéhez). */
+  viewRect() {
+    const cam = this.cameras.main, w = cam.width / cam.zoom, h = cam.height / cam.zoom;
+    return { x: cam.scrollX + cam.width / 2 - w / 2, y: cam.scrollY + cam.height / 2 - h / 2, w, h };
   }
   private toWorld(px: number, py: number) {
     const cam = this.cameras.main;
@@ -205,29 +219,23 @@ export class WorldMapScene extends Phaser.Scene {
     g.closePath();
   }
 
-  /** Folyók és utak: a játék során nem változnak. */
-  private drawStatic(s: GameState) {
-    const g = this.staticG;
-    g.clear();
-    const link = (flag: 'river' | 'road', draw: (a: { x: number; y: number }, b: { x: number; y: number }, lone: boolean) => void) => {
-      s.tiles.forEach((tile, i) => {
-        if (!tile[flag]) return;
-        const a = hexCenter(i, HEX, s.width);
-        const nbs = neighbors(i, s.width, s.height).filter(n => s.tiles[n][flag]);
-        if (!nbs.length) draw(a, a, true);
-        for (const n of nbs) if (n > i) draw(a, hexCenter(n, HEX, s.width), false);
-      });
-    };
-    link('river', (a, b, lone) => {
-      if (lone) { g.fillStyle(0x4f93c9, 0.9); g.fillCircle(a.x, a.y + 14, 9); return; }
-      g.lineStyle(13, 0x2d5f8a, 0.85); g.lineBetween(a.x, a.y + 14, b.x, b.y + 14);
-      g.lineStyle(8, 0x5aa5d8, 0.95); g.lineBetween(a.x, a.y + 14, b.x, b.y + 14);
-      g.fillStyle(0x5aa5d8, 0.95); g.fillCircle(a.x, a.y + 14, 4); g.fillCircle(b.x, b.y + 14, 4);
-    });
-    link('road', (a, b, lone) => {
-      if (lone) return;
-      g.lineStyle(7, 0x4a3520, 0.7); g.lineBetween(a.x, a.y + 4, b.x, b.y + 4);
-      g.lineStyle(4, 0xd9c08a, 0.95); g.lineBetween(a.x, a.y + 4, b.x, b.y + 4);
+  /** Hangulatelemek: vonuló felhőárnyékok, lebegő fényszemcsék, vízcsillanás. */
+  private addAmbience(s: GameState) {
+    for (let i = 0; i < 6; i++) {
+      const y = (this.worldH / 6) * i + Math.random() * 120;
+      const cloud = this.add.image(-400 - Math.random() * 600, y, 'cloud').setScale(2.2 + Math.random() * 1.6, 1.3 + Math.random()).setDepth(6.4).setAlpha(0.55);
+      this.tweens.add({ targets: cloud, x: this.worldW + 500, duration: 60000 + Math.random() * 50000, repeat: -1, delay: i * 5000 });
+    }
+    for (let i = 0; i < 34; i++) {
+      const mote = this.add.image(Math.random() * this.worldW, Math.random() * this.worldH, 'mote-spring').setDepth(6.6).setAlpha(0).setScale(0.5 + Math.random() * 0.6);
+      this.motes.push(mote);
+      this.tweens.add({ targets: mote, alpha: 0.85, y: mote.y - 30 - Math.random() * 40, x: mote.x + (Math.random() - 0.5) * 50, duration: 3200 + Math.random() * 3600, yoyo: true, repeat: -1, delay: Math.random() * 5000, ease: 'Sine.easeInOut' });
+    }
+    s.tiles.forEach((tile, i) => {
+      if (!tile.river || i % 2) return;
+      const { x, y } = hexCenter(i, HEX, s.width);
+      const glint = this.add.image(x + ((i * 13) % 20) - 10, y + 11, 'glint').setDepth(1.5).setAlpha(0).setScale(0.6, 0.35);
+      this.tweens.add({ targets: glint, alpha: 0.9, scaleX: 1.2, duration: 900 + (i % 5) * 300, yoyo: true, repeat: -1, delay: (i * 370) % 4000, hold: 100, repeatDelay: 1500 + (i % 4) * 700 });
     });
   }
 
@@ -238,15 +246,18 @@ export class WorldMapScene extends Phaser.Scene {
       if (!tile.owner || !explored[i]) return;
       const col = colorOf(tile.owner);
       this.hexPoly(g, i, HEX - 1, s.width);
-      g.fillStyle(col, 0.2); g.fillPath();
+      g.fillStyle(col, 0.13); g.fillPath();
       const c = hexCenter(i, HEX, s.width);
       const inner = hexCorners(c.x, c.y, HEX - 3.5);
       for (let e = 0; e < 6; e++) {
         const n = neighborAcrossEdge(i, e, s.width, s.height);
         if (n >= 0 && s.tiles[n].owner === tile.owner) continue;
         const a = inner[e], b = inner[(e + 1) % 6];
-        g.lineStyle(6, 0x14100a, 0.45); g.lineBetween(a.x, a.y, b.x, b.y);
-        g.lineStyle(3.5, col, 1); g.lineBetween(a.x, a.y, b.x, b.y);
+        g.lineStyle(13, col, 0.12); g.lineBetween(a.x, a.y, b.x, b.y);
+        g.lineStyle(8, col, 0.22); g.lineBetween(a.x, a.y, b.x, b.y);
+        g.lineStyle(5, 0x0c0a08, 0.55); g.lineBetween(a.x, a.y, b.x, b.y);
+        g.lineStyle(2.6, col, 1); g.lineBetween(a.x, a.y, b.x, b.y);
+        g.lineStyle(1, 0xffffff, 0.35); g.lineBetween(a.x, a.y, b.x, b.y);
       }
     });
   }
@@ -270,7 +281,7 @@ export class WorldMapScene extends Phaser.Scene {
     this.cityLayer.removeAll(true);
     for (const c of s.cities) {
       const { x, y } = hexCenter(c.tile, HEX, s.width);
-      this.cityLayer.add(this.add.image(x, y - 12, `city-${c.level}`).setScale(INV * 1.05));
+      this.cityLayer.add(this.add.image(x, y - 14, `city-${c.level}`).setScale(INV * 1.22));
       this.cityLayer.add(this.add.image(x - 30, y - 34, `flag-${c.owner}`).setScale(INV));
       const label = this.add.text(x, y + 30, (c.capitalOf ? '★ ' : '') + c.name, LABEL).setOrigin(0.5).setResolution(3);
       this.cityLayer.add(label);
@@ -332,8 +343,8 @@ export class WorldMapScene extends Phaser.Scene {
     if (reach) {
       for (const [i] of reach.moves) {
         this.hexPoly(g, i, HEX - 5, s.width);
-        g.fillStyle(0xffffff, 0.2); g.fillPath();
-        g.lineStyle(2, 0xffffff, 0.55); g.strokePath();
+        g.fillStyle(0xfff3c4, 0.1); g.fillPath();
+        g.lineStyle(2, 0xfff3c4, 0.7); g.strokePath();
       }
       for (const i of reach.attacks) {
         this.hexPoly(g, i, HEX - 5, s.width);
@@ -387,13 +398,18 @@ export class WorldMapScene extends Phaser.Scene {
     const season = seasonOf(s.turn);
     if (season !== this.season) {
       this.season = season;
-      s.tiles.forEach((tile, i) => this.tileImgs[i].setTexture(`t-${tile.terrain}-${season}-${i % TERRAIN_VARIANTS}`));
+      s.tiles.forEach((tile, i) => {
+        this.tileImgs[i].setTexture(`g-${tile.terrain}-${season}-${i % GROUND_VARIANTS}`);
+        this.decorImgs[i].setTexture(`d-${tile.terrain}-${season}-${i % TERRAIN_VARIANTS}`);
+      });
+      for (const m of this.motes) m.setTexture(`mote-${season}`);
     }
+    s.tiles.forEach((tile, i) => this.decorImgs[i].setVisible(!tile.cityId));
     this.drawOwnership(s, s.explored);
     this.drawFeatures(s);
     this.drawCities(s);
     this.syncArmies(s, app.visible);
-    s.tiles.forEach((_t, i) => this.fogImgs[i].setAlpha(app.visible[i] ? 0 : s.explored[i] ? 0.42 : 1));
+    s.tiles.forEach((_t, i) => this.fogImgs[i].setAlpha(app.visible[i] ? 0 : s.explored[i] ? 0.5 : 1));
     this.drawHighlights(s);
     this.drawSelection();
   }

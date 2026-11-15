@@ -4,7 +4,8 @@
  */
 import { t } from './i18n';
 import { APP_VERSION, isTauri, native } from './platform/Platform';
-import { HEX, HEX_W, cityCanvas, fogCanvas, logoUrl, ruinCanvas, terrainCanvas } from './render/TextureFactory';
+import { DECOR_ANCHOR_Y, decorCanvas, fogCanvas, groundCanvas } from './render/TerrainArt';
+import { HEX, HEX_W, cityCanvas, logoUrl, ruinCanvas } from './render/TextureFactory';
 import { Settings, WINDOW_SIZES, loadSettings, saveSettings } from './storage/Settings';
 import { hexCenter } from './world/HexMap';
 import { generateMap } from './world/MapGenerator';
@@ -24,14 +25,20 @@ function drawBackground() {
   const ctx = canvas.getContext('2d')!;
   const cache = new Map<string, HTMLCanvasElement>();
   const tex = (key: string, make: () => HTMLCanvasElement) => cache.get(key) ?? (cache.set(key, make()), cache.get(key)!);
-  const put = (img: HTMLCanvasElement, x: number, y: number, alpha = 1) => {
+  const put = (img: HTMLCanvasElement, x: number, y: number, alpha = 1, anchorY = 0.5) => {
     ctx.globalAlpha = alpha;
-    ctx.drawImage(img, x * 2 - img.width / 2, y * 2 - img.height / 2);
+    ctx.drawImage(img, x * 2 - img.width / 2, y * 2 - img.height * anchorY);
     ctx.globalAlpha = 1;
   };
+  ctx.fillStyle = '#0d1118'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const special = new Set([...map.capitals, ...map.villages]);
   map.tiles.forEach((tile, i) => {
     const { x, y } = hexCenter(i, HEX);
-    put(tex(`${tile.terrain}${i % 3}`, () => terrainCanvas(tile.terrain, 'autumn', i % 3)), x, y);
+    put(tex(`g${tile.terrain}${i % 2}`, () => groundCanvas(tile.terrain, 'autumn', i % 2)), x, y);
+  });
+  map.tiles.forEach((tile, i) => {
+    const { x, y } = hexCenter(i, HEX);
+    if (!special.has(i)) put(tex(`d${tile.terrain}${i % 3}`, () => decorCanvas(tile.terrain, 'autumn', i % 3)), x, y, 1, DECOR_ANCHOR_Y);
     if (tile.ruin) put(tex('ruin', ruinCanvas), x, y);
   });
   [...map.capitals, ...map.villages].forEach((i, k) => {
