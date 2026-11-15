@@ -17,5 +17,15 @@ export const isStandalone = typeof window !== 'undefined' &&
 
 export function registerServiceWorker() {
   if (isTauri || !('serviceWorker' in navigator) || import.meta.env.DEV) return;
-  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => undefined); });
+  // Ha új változat veszi át az irányítást, egyszer újratöltjük az oldalt, hogy az jelenjen meg.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    window.location.reload();
+  });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => reg.update()).catch(() => undefined);
+  });
 }

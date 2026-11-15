@@ -22,16 +22,24 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const store = res => {
+    if (res.ok) {
+      const copy = res.clone();
+      caches.open(CACHE).then(cache => cache.put(req, copy));
+    }
+    return res;
+  };
+  // Az oldal betöltésekor előbb a hálózatról kérjük a friss változatot; a gyorsítótár csak
+  // akkor lép be, ha nincs kapcsolat. Így egy új kiadás azonnal megjelenik.
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req, { cache: 'no-store' }).then(store)
+        .catch(() => caches.match(req, { ignoreSearch: true, ignoreVary: true }).then(hit => hit || caches.match('./index.html', { ignoreVary: true }))),
+    );
+    return;
+  }
+  // A többi fájl neve a tartalmától függ (hash), ezért ezek biztonsággal jöhetnek a gyorsítótárból.
   event.respondWith(
-    caches.match(req, { ignoreSearch: true, ignoreVary: true }).then(hit => {
-      if (hit) return hit;
-      return fetch(req).then(res => {
-        if (res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then(cache => cache.put(req, copy));
-        }
-        return res;
-      }).catch(() => (req.mode === 'navigate' ? caches.match('./index.html', { ignoreVary: true }) : Response.error()));
-    }),
+    caches.match(req, { ignoreSearch: true, ignoreVary: true }).then(hit => hit || fetch(req).then(store).catch(() => Response.error())),
   );
 });
